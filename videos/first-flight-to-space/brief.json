@@ -1,0 +1,13 @@
+{
+  "topic": "first-flight-to-space",
+  "duration_s": 60.0,
+  "notes": "Second-person journey through a first spaceflight. Warm, awed, not technical. Real numbers only. SEO steer: 'outer space' / 'living in space' (low competition) rather than 'first time in space astronaut' (no volume).",
+  "budget": {
+    "target_s": 60.0,
+    "body_s": 44.0,
+    "shots": 6,
+    "words_total": 115,
+    "words_per_shot": 19,
+    "seconds_per_shot": 7.33
+  }
+}

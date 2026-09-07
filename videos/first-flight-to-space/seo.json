@@ -1,0 +1,24 @@
+{
+  "_source": "vidIQ via Claude session, 2026-09-07 (10 credits: 5 titles + 5 keyword research)",
+  "titles": [
+    {"title": "The Edge of Space: What It's Like to Be an Astronaut", "score": 97},
+    {"title": "What It's Like to Blast Off into Outer Space", "score": 96},
+    {"title": "The Reality of Space Travel: What to Expect", "score": 93},
+    {"title": "Living in Space: 16 Sunrises a Day and Beyond", "score": 91},
+    {"title": "8 Minutes to Orbit: A Journey to the Edge of Space", "score": 89}
+  ],
+  "_rejected": [
+    {"title": "Beyond the Atmosphere: My First Trip to Outer Space", "score": 93,
+     "why": "Says 'My first trip' in the first person. The presenter is synthetic and has not been to space; this would be a false claim on a video that already carries a synthetic-content disclosure. Do not use."}
+  ],
+  "keywords": [
+    {"keyword": "outer space", "overall": 65.2, "volume": 69.0, "competition": 40.5, "monthly": 41652},
+    {"keyword": "living in space", "overall": 57.4, "volume": 53.6, "competition": 37.0, "monthly": 3888},
+    {"keyword": "international space station", "overall": 62.1, "volume": 71.2, "competition": 51.5, "monthly": 58623},
+    {"keyword": "space exploration", "overall": 64.5, "volume": 72.5, "competition": 47.5, "monthly": 72070}
+  ],
+  "_keyword_note": "The literal topic phrase 'first time in space astronaut' scores <750 monthly searches. Target 'outer space' and 'living in space' instead: lowest competition of the viable set.",
+  "description": "The first time you go to space, the trip up takes about eight minutes. This is what those eight minutes actually feel like: the hours strapped in waiting, the 28,000 km/h you have to reach to stay in orbit, the edge of space just 100 km up, and life 400 km above the planet where the sun rises 16 times a day.\n\nEvery figure in this video is a published constant, not an estimate.",
+  "tags": ["outer space", "living in space", "space exploration", "international space station",
+           "astronaut", "low earth orbit", "overview effect", "space travel"]
+}
