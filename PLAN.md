@@ -81,10 +81,48 @@ a 60 s test: predicted 58 s, rendered 57.52 s, frame counts exact at every join.
   `make_video.py` renders `out/upload.md` from it. Measured cost: 10 credits
   per video against a 150/month free allowance.
 
+## Generated footage (in progress)
+
+A `clip` shot kind now sits alongside the drawn kinds. Its footage comes from a
+video model on a GPU; everything downstream -- captions, music, mix, stitch,
+frame-count verification -- is unchanged and still applies.
+
+- `studio/footage.py` conforms whatever the model returns to the exact frame
+  count the narration needs. LTX-Video works in frames divisible by 8 plus 1,
+  so a 193-frame clip is 8.04 s at 24 fps while a shot might want 8.4 s. Three
+  modes: **trim** when the source is long enough, **speed** (setpts) within
+  +/-15% where a retime is invisible, **boomerang** (forward + reversed, looped,
+  trimmed) beyond that. Verified: all three land on the exact frame count.
+- Missing footage degrades to a text card with a warning, the same policy as a
+  failed Commons download. A model that drops one clip cannot kill a render.
+- Optional lower-third headline overlay for clip shots.
+- Generation resolution is **1024x576**: exactly 16:9 and divisible by 32, as
+  LTX requires, and only a 1.875x upscale to 1080p. Fall back to 704x384 if a
+  T4 runs out of VRAM. Generating at 4:3 and cropping to 16:9 loses a third of
+  the frame -- do not.
+
+**No Hugging Face.** Weights come from a Kaggle dataset named in `config.json`
+(`python tools/setup_check.py --set-weights owner/slug`), and the notebook sets
+`HF_HUB_OFFLINE` / `TRANSFORMERS_OFFLINE` / `DIFFUSERS_OFFLINE` so an accidental
+reach for the Hub raises instead of silently downloading. If a load fails, the
+fix is to attach the right dataset -- never to unset the flags.
+
+`tools/gpu_probe.py` answers step 0: local GPU with 12 GB+ means generate
+locally; otherwise Kaggle's free T4. CPU-only is not viable at hours per clip.
+
 ## Open items
 
 - [ ] Run `python tools/kaggle_run.py --job smoke` against the real account.
   This is the one path that could not be exercised without live credentials.
+- [ ] **Quality gate:** `python tools/kaggle_run.py --job footage-samples --ref <still>`
+      then watch the three clips before any further footage work. The notebooks
+      in `kaggle/make_footage_nb.py` have never run on a live GPU -- the build
+      machine had neither a GPU nor network access to Kaggle. Treat the first
+      run as a debugging session.
+- [ ] Find or mirror LTX-Video weights as a Kaggle dataset, then
+      `python tools/setup_check.py --set-weights owner/slug`.
+- [ ] Check the model licence before publishing: some open-weight video models
+      carry non-commercial terms that matter for a monetised channel.
 - [ ] First real Flow hook/close, then `cut_voice_ref.py` and the voice job.
 - [ ] Drop a CC0/CC BY music bed into `assets/music/`.
 - [ ] Optional: install `kokoro-onnx` for local draft narration.

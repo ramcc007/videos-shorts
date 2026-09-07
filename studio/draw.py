@@ -402,4 +402,10 @@ def render_shot(shot: dict, image_path: Path | None = None,
                 credit: str | None = None) -> Image.Image:
     if shot["kind"] == "photo":
         return photo(shot, image_path, credit)
+    if shot["kind"] == "clip":
+        # Only ever used when the generated footage is missing, so the render
+        # degrades to a readable card instead of failing outright.
+        fallback = dict(shot)
+        fallback.setdefault("headline", shot.get("prompt", "")[:80])
+        return card(fallback)
     return RENDERERS[shot["kind"]](shot)

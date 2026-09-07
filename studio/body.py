@@ -80,9 +80,10 @@ def build(topic: str, SHOTS: list[dict], argv=None) -> Path | None:
         return None
 
     # 3. motion ------------------------------------------------------------
-    print(f"[3/6] Ken Burns clips")
+    print(f"[3/6] shot clips (generated footage where present, Ken Burns otherwise)")
     t0 = time.time()
-    clips = render.make_clips(stills, durations, bdir / "clips")
+    clips = render.make_shot_clips(SHOTS, stills, durations, bdir / "clips",
+                                   bdir / "footage")
     silent_video = render.concat_clips(clips, work / "silent.mp4")
     print(f"      {len(clips)} clips in {time.time()-t0:.0f}s")
 

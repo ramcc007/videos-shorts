@@ -106,6 +106,55 @@ def make_clips(stills: list[Path], durations: list[float], clips_dir: Path) -> l
     return out
 
 
+def make_shot_clips(shots: list[dict], stills: list[Path], durations: list[float],
+                    clips_dir: Path, footage_dir: Path) -> list[Path]:
+    """One clip per shot: generated footage where we have it, Ken Burns otherwise.
+
+    A clip shot whose footage never arrived falls back to its drawn card rather
+    than killing the render -- same policy as a failed photo download.
+    """
+    from . import footage as footagemod
+
+    clips_dir.mkdir(parents=True, exist_ok=True)
+    out: list[Path] = []
+    for i, (shot, still, dur) in enumerate(zip(shots, stills, durations)):
+        clip = clips_dir / f"{i:03d}.mp4"
+        src = footagemod.source_for(i, footage_dir) if shot["kind"] == "clip" else None
+
+        if shot["kind"] == "clip" and src is None:
+            print(f"  [{i:>2}] WARNING: no footage for clip shot; using the text card. "
+                  f"Expected {footage_dir / f'{i:03d}.mp4'}")
+
+        if src is not None:
+            raw = clips_dir / f"{i:03d}_raw.mp4"
+            footagemod.conform(src, raw, dur)
+            overlay = footagemod.headline_overlay(shot, clips_dir / f"{i:03d}_ovl.png")
+            if overlay is not None:
+                footagemod.apply_overlay(raw, overlay, clip)
+                raw.unlink(missing_ok=True)
+            else:
+                raw.replace(clip)
+            print(f"  [{i:>2}] footage  {src.name} -> {dur:.2f}s")
+        else:
+            _kenburns_clip(still, dur, i, clip)
+            print(f"  [{i:>2}] {shot['kind']:<7} {dur:.2f}s")
+        out.append(clip)
+    return out
+
+
+def _kenburns_clip(still: Path, dur: float, index: int, clip: Path) -> Path:
+    frames = max(2, int(round(dur * FPS)))
+    z, x, y = _kenburns(index, frames)
+    vf = (f"zoompan=z='{z}':x='{x}':y='{y}':d=1:s={OUT_W}x{OUT_H}:fps={FPS},"
+          f"format=yuv420p")
+    ff(["-loop", "1", "-framerate", str(FPS), "-t", f"{frames/FPS:.4f}",
+        "-i", str(still), "-vf", vf, "-frames:v", str(frames),
+        "-c:v", "libx264", "-crf", "18", "-preset", "medium",
+        "-pix_fmt", "yuv420p", "-an", str(clip)],
+       f"animating shot {index}")
+    return clip
+
+
 def concat_clips(clips: list[Path], out_path: Path) -> Path:
     listing = out_path.parent / "concat.txt"
     listing.write_text("".join(f"file '{c.resolve().as_posix()}'\n" for c in clips),

@@ -58,5 +58,28 @@ def kaggle_username() -> str:
     )
 
 
+def footage_weights() -> tuple[str, str]:
+    """Where the video-model weights live on Kaggle.
+
+    Deliberately NOT Hugging Face. Returns (dataset_ref, mount_path) where
+    dataset_ref is "owner/slug" of a Kaggle dataset holding the weights, and
+    mount_path is where the kernel will see them.
+
+    Set both with:
+      python tools/setup_check.py --set-weights owner/slug
+    """
+    cfg = load()
+    ref = os.environ.get("STUDIO_WEIGHTS_DATASET") or cfg.get("footage_weights_dataset")
+    if not ref:
+        raise SystemExit(
+            "No footage weights dataset configured.\n"
+            "  Set it with:  python tools/setup_check.py --set-weights owner/slug\n"
+            "It must be a KAGGLE dataset holding the model weights -- this project\n"
+            "does not use Hugging Face. Mirror the weights into your own private\n"
+            "Kaggle dataset if no public one exists.")
+    mount = cfg.get("footage_weights_dir") or f"/kaggle/input/{ref.split('/')[-1]}"
+    return ref, mount
+
+
 def video_dir(topic: str) -> Path:
     return VIDEOS / topic

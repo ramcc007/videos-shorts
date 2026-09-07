@@ -195,11 +195,12 @@ def download(a, ref: str, out_dir: Path) -> Path:
 
 
 def run(notebook: Path, slug: str, out_dir: Path, inputs: Path | None,
-        gpu: bool, internet: bool, timeout_min: int) -> Path:
+        gpu: bool, internet: bool, timeout_min: int,
+        extra_datasets: list[str] | None = None) -> Path:
     user = config.kaggle_username()
     a = api()
     staging = config.ROOT / "build" / "_staging" / slug
-    dataset_refs = []
+    dataset_refs = list(extra_datasets or [])
     if inputs is not None:
         dataset_refs.append(
             push_dataset(a, user, f"{slug}-inputs", inputs, staging.parent / f"{slug}-inputs"))
@@ -247,10 +248,92 @@ def job_voice(args) -> None:
     print(f"(output in {out})")
 
 
+def job_footage_samples(args) -> None:
+    """The quality gate: three clips, then a human looks at them."""
+    ref, mount = config.footage_weights()
+    sys.path.insert(0, str(config.ROOT / "kaggle"))
+    import make_footage_nb
+
+    prompts = [args.prompt] * 2 if args.prompt else [
+        "a rocket rising through low cloud at dawn, slow push in, cinematic",
+        "the curved edge of the earth from orbit, sunlight creeping across the terminator",
+    ]
+    prompts.append(args.prompt or
+                   "a woman looking out of a spacecraft window, quiet, cinematic")
+
+    nb_path = config.ROOT / "build" / "footage_samples.ipynb"
+    make_footage_nb.build_samples(nb_path, mount, prompts,
+                                  ref_image=Path(args.ref).name if args.ref else None)
+
+    inputs = None
+    if args.ref:
+        staged = config.ROOT / "build" / "footage_ref"
+        staged.mkdir(parents=True, exist_ok=True)
+        import shutil as _sh
+        _sh.copy2(args.ref, staged / Path(args.ref).name)
+        inputs = staged
+
+    out = run(nb_path, "footage-samples", config.ROOT / "build" / "footage_samples_out",
+              inputs, gpu=True, internet=True, timeout_min=args.timeout,
+              extra_datasets=[ref])
+    print(f"""
+Samples are in {out}.
+Unzip samples.zip and WATCH THEM before anything else is built.
+
+The question is only: is this good enough to publish? If it is not, say so --
+switching model, resolution or style is cheap now and expensive later.""")
+
+
+def job_footage(args) -> None:
+    if not args.topic:
+        raise SystemExit("--job footage needs --topic <name>")
+    ref, mount = config.footage_weights()
+    mod = script.load(args.topic)
+    clips = [s for s in mod.SHOTS if s["kind"] == "clip"]
+    if not clips:
+        raise SystemExit(f"{args.topic} has no 'clip' shots; nothing to generate.")
+    print(f"[footage] {len(clips)} clip shots of {len(mod.SHOTS)}")
+
+    sys.path.insert(0, str(config.ROOT / "kaggle"))
+    import make_footage_nb
+    slug = f"footage-{args.topic}"[:48]
+    nb_path = config.ROOT / "build" / f"{slug}.ipynb"
+    make_footage_nb.build_batch(nb_path, mount, mod.SHOTS,
+                                ref_image=Path(args.ref).name if args.ref else None)
+
+    inputs = None
+    if args.ref:
+        staged = config.ROOT / "build" / f"{slug}_ref"
+        staged.mkdir(parents=True, exist_ok=True)
+        import shutil as _sh
+        _sh.copy2(args.ref, staged / Path(args.ref).name)
+        inputs = staged
+
+    vdir = config.video_dir(args.topic)
+    out = run(nb_path, slug, vdir / "body" / "footage_zip", inputs,
+              gpu=True, internet=True, timeout_min=args.timeout,
+              extra_datasets=[ref])
+
+    # unpack next to the renderer, which pairs clips to shots by index
+    import zipfile
+    dest = vdir / "body" / "footage"
+    dest.mkdir(parents=True, exist_ok=True)
+    for z in Path(out).glob("*.zip"):
+        with zipfile.ZipFile(z) as zf:
+            zf.extractall(dest)
+    got = sorted(p.name for p in dest.glob("*.mp4"))
+    print(f"[footage] {len(got)} clips -> {dest}: {', '.join(got) or '(none)'}")
+    print(f"\nNow render:\n  python videos/{args.topic}/body/build_body.py --reuse-voice")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--job", choices=("smoke", "voice"), help="a canned job")
+    p.add_argument("--job", choices=("smoke", "voice", "footage-samples", "footage"),
+                   help="a canned job")
+    p.add_argument("--ref", help="reference still for image-to-video "
+                                 "(e.g. a frame from a Flow character clip)")
+    p.add_argument("--prompt", help="override the sample prompts")
     p.add_argument("--topic", help="video topic, for --job voice")
     p.add_argument("--notebook", type=Path, help="run an arbitrary notebook")
     p.add_argument("--slug", help="kernel slug for --notebook")
@@ -265,6 +348,10 @@ def main() -> None:
         return job_smoke(args)
     if args.job == "voice":
         return job_voice(args)
+    if args.job == "footage-samples":
+        return job_footage_samples(args)
+    if args.job == "footage":
+        return job_footage(args)
     if not (args.notebook and args.slug and args.out):
         p.error("give --job, or all of --notebook --slug --out")
     run(args.notebook, args.slug, args.out, args.inputs,

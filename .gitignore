@@ -17,6 +17,9 @@ videos/*/flow/*.mov
 videos/*/body/stills/
 videos/*/body/clips/
 videos/*/body/_work/
+videos/*/body/footage/
+videos/*/body/footage_zip/
+build/
 videos/*/body/photos/
 videos/*/body/kaggle_out/
 videos/*/body/voice/
