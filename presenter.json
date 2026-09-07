@@ -1,0 +1,12 @@
+{
+  "_comment": "Your recurring presenter. Edit this once; every video's Flow prompts are generated from it, which is what keeps the face and the room consistent across the channel. Your character must be YOUR OWN Flow generation - attach it as a Flow character so the face stays stable.",
+  "name": "Maya",
+  "flow_character": "Maya",
+  "appearance": "a woman in her early thirties, shoulder-length dark hair, warm and direct to camera",
+  "wardrobe": "a plain charcoal crew-neck jumper",
+  "room": "a small home studio: a plain warm-grey wall, a bookshelf softly out of focus behind her right shoulder, a single plant",
+  "camera": "medium close-up, eye level, 50mm lens, shallow depth of field, static tripod shot",
+  "lighting": "soft key light from a window to camera left, warm practical lamp glowing behind her",
+  "delivery": "conversational, unhurried, a slight smile, natural pauses",
+  "audio": "clean indoor dialogue, no music, no room echo"
+}

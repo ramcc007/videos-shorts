@@ -59,6 +59,28 @@ Running notes for the explainer-video pipeline. Updated after every step.
    with a duplicate. Fixed by pinning both streams of every segment to exactly
    `frames / 25` with `trim` / `apad`+`atrim`. 1902 = 1902.
 
+## Second system (topic, duration, notes -> video)
+
+`tools/make_video.py` orchestrates the whole run as a resumable state machine:
+`new` -> `check` -> `flow` -> `watch`/`run` -> `status`. Verified end to end on
+a 60 s test: predicted 58 s, rendered 57.52 s, frame counts exact at every join.
+
+- **Flow stays manual, deliberately.** Flow has no public API. Veo 3.1 is
+  available through the Gemini API and Vertex AI, but as a separate paid
+  product that the AI Pro credits do not cover. `watch` polls the flow/ folder
+  so the manual part is reduced to pasting two prompts and downloading two
+  clips; everything after that is unattended. Automating the Flow UI with a
+  headless browser was considered and rejected: it breaks Google's terms and
+  risks the account.
+- **`presenter.json`** defines the presenter once. Every video's Flow prompts
+  are generated from it, so the room and character cannot drift between videos.
+- **`studio/plan.py`** shares its pacing constants with `studio/voice.py`, so
+  the duration estimate and the real render agree; `check` enforces +/-10%.
+- **vidIQ for titles/keywords.** It is an MCP tool, so it runs in a Claude
+  session, not in the pipeline: Claude writes `videos/<topic>/seo.json` and
+  `make_video.py` renders `out/upload.md` from it. Measured cost: 10 credits
+  per video against a 150/month free allowance.
+
 ## Open items
 
 - [ ] Run `python tools/kaggle_run.py --job smoke` against the real account.
@@ -66,6 +88,9 @@ Running notes for the explainer-video pipeline. Updated after every step.
 - [ ] First real Flow hook/close, then `cut_voice_ref.py` and the voice job.
 - [ ] Drop a CC0/CC BY music bed into `assets/music/`.
 - [ ] Optional: install `kokoro-onnx` for local draft narration.
+- [ ] Fill in `presenter.json` with the real Maya, once her Flow character exists.
+- [ ] Authorize a YouTube channel in vidIQ (currently none), for channel-aware
+      title scoring and the analytics tools.
 
 ## Deliberate deviations from the original brief
 

@@ -7,6 +7,10 @@ access_token
 # --- local config (holds your Kaggle username) ---
 config.json
 
+# --- derived per-video files (regenerated on demand) ---
+videos/*/state.json
+videos/*/flow_prompts.txt
+
 # --- heavy build artefacts ---
 videos/*/flow/*.mp4
 videos/*/flow/*.mov

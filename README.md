@@ -115,9 +115,19 @@ Useful flags:
 
 ## 5. Make your own video
 
+The second system takes **topic, duration and notes** and runs everything
+except the Flow clicks. See `docs/SECOND_SYSTEM.md`.
+
 ```bash
-python tools/new_video.py my-topic
+python tools/make_video.py new --topic solar-payback --duration 120 \
+    --notes "UK angle, sceptical tone"
+# Claude writes the script, then:
+python tools/make_video.py check --topic solar-payback   # hits the target duration?
+python tools/make_video.py flow  --topic solar-payback   # two prompts to paste into Flow
+python tools/make_video.py watch --topic solar-payback   # walk away
 ```
+
+`tools/new_video.py my-topic` still scaffolds a video by hand if you prefer.
 
 Then edit `videos/my-topic/body/build_body.py`. That file holds the entire
 script: a `SHOTS` list, plus the `HOOK` and `CLOSE` lines you will read into
@@ -145,11 +155,16 @@ studio/                     the shared render engine
   photos.py                 Wikimedia Commons, CC0/CC BY/PD only
   voice.py                  chatterbox | kokoro | silent narration
   captions.py               burned-in captions as ASS
+  plan.py                   duration -> shot and word budget, and the check
+  presenter.py              Flow prompt generation from presenter.json
+  state.py                  per-video progress, so a failed run resumes
   render.py                 ffmpeg: motion, mixing, contact sheet
   body.py                   the six-stage build, with checks
+presenter.json              your recurring presenter; Flow prompts generate from it
 tools/
   setup_check.py            preflight
-  new_video.py              scaffold a video
+  make_video.py             the orchestrator: topic + duration + notes -> video
+  new_video.py              scaffold a video by hand
   kaggle_run.py             push a notebook to Kaggle, poll, download
   fix_clip.py               de-logo and normalise a Flow clip
   cut_voice_ref.py          cut the 15 s voice reference
@@ -175,3 +190,4 @@ videos/<topic>/
 | Body render | free — CPU only, ~1 minute per minute of video |
 | Charts, photos, captions, music | free |
 | Presenter | ~40 Flow credits from the Google AI Pro grant; credits do not roll over |
+| Titles and keywords | ~10 vidIQ credits (free plan gives 150/month, so ~15 videos) |
