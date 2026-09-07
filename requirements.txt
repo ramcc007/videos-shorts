@@ -1,0 +1,11 @@
+# Local (laptop) requirements. Python 3.11+.
+# The GPU-only packages (chatterbox-tts, torch) are installed *inside the
+# Kaggle notebook*, never here -- see kaggle/make_voice_nb.py.
+
+pillow>=10.2          # all chart/card drawing
+requests>=2.31        # Wikimedia Commons photo fetch
+kaggle>=1.6           # notebook push / status / output  (2.2.x also supported)
+
+# Optional: local draft narration without spending a Kaggle GPU hour.
+#   pip install kokoro-onnx soundfile
+# Without it, `build_body.py` falls back to --voice silent for layout drafts.

@@ -1,0 +1,34 @@
+# --- credentials: never commit ---
+kaggle.json
+access_token
+*.pem
+.env
+
+# --- local config (holds your Kaggle username) ---
+config.json
+
+# --- heavy build artefacts ---
+videos/*/flow/*.mp4
+videos/*/flow/*.mov
+videos/*/body/stills/
+videos/*/body/clips/
+videos/*/body/_work/
+videos/*/body/photos/
+videos/*/body/kaggle_out/
+videos/*/body/voice/
+videos/*/out/
+videos/*/voice/*.flac
+videos/*/voice/*.wav
+*.mp4
+*.mkv
+*.wav
+*.flac
+*.zip
+!assets/music/*.mp3
+
+# --- python ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
