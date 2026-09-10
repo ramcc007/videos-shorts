@@ -82,7 +82,7 @@ def main() -> int:
                 __import__(mod)
             line(OK, mod, why)
         except ImportError:
-            line(BAD, mod, f"missing -- pip install -r requirements.txt ({why})"); problems += 1
+            line(BAD, mod, f"missing -- see the install hint below ({why})"); problems += 1
 
     try:
         import kokoro_onnx  # noqa: F401
@@ -121,15 +121,29 @@ def main() -> int:
     else:
         line(WARN, "music bed", "none in assets/music -- renders will have no bed")
 
-    from studio import theme
-    if theme.font_path("bold"):
-        line(OK, "fonts", Path(theme.font_path("bold")).name)
-    else:
-        line(BAD, "fonts", "no usable TTF found"); problems += 1
+    try:
+        from studio import theme
+        if theme.font_path("bold"):
+            line(OK, "fonts", Path(theme.font_path("bold")).name)
+        else:
+            line(BAD, "fonts", "no usable TTF found"); problems += 1
+    except ImportError as e:
+        # Pillow missing is already reported above; don't crash the report that
+        # is meant to tell you what to install.
+        line(BAD, "fonts", f"cannot check ({e.name} missing)"); problems += 1
 
     print("-" * 64)
     if problems:
         print(f"{problems} thing(s) to fix before the pipeline will run.")
+        # Always spell out the interpreter: installing with a bare `pip` when
+        # several Pythons are on PATH is the usual reason a package reads as
+        # missing right after a successful install.
+        exe = Path(sys.executable).name
+        print(f'\nInstall into THIS interpreter ({sys.executable}):\n'
+              f'  "{sys.executable}" -m pip install -r requirements.txt\n'
+              f'  "{sys.executable}" -m pip install kokoro-onnx soundfile\n'
+              f'\nA bare `pip` may belong to a different Python. '
+              f'`{exe} -m pip` never does.')
         return 1
     print("All good. Next:  python tools/kaggle_run.py --job smoke")
     return 0
