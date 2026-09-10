@@ -7,12 +7,32 @@ from pathlib import Path
 
 from PIL import ImageFont
 
+from . import formats
+
 # --- canvas -----------------------------------------------------------------
-# Stills are drawn larger than 1080p so the Ken Burns push-in never softens.
-RENDER_W, RENDER_H = 2560, 1440
-OUT_W, OUT_H = 1920, 1080
+# Stills are drawn larger than the output so the Ken Burns push never softens.
+# These are module-level and MUTABLE: use_format() rebinds them. Read them as
+# `theme.OUT_W`, never `from .theme import OUT_W`, or you will capture the
+# format that happened to be active at import time.
 FPS = 25
-SCALE = RENDER_W / OUT_W          # 1.333 -- multiply 1080p sizes by this
+
+ACTIVE = formats.LONG
+OUT_W, OUT_H = ACTIVE.out_w, ACTIVE.out_h
+LOGICAL_W, LOGICAL_H = OUT_W, OUT_H          # layout units == output pixels
+RENDER_W, RENDER_H = ACTIVE.render_w, ACTIVE.render_h
+SCALE = RENDER_W / LOGICAL_W
+
+
+def use_format(name: str | formats.Format) -> formats.Format:
+    """Switch the whole render stack to another output format."""
+    global ACTIVE, OUT_W, OUT_H, LOGICAL_W, LOGICAL_H, RENDER_W, RENDER_H, SCALE
+    ACTIVE = name if isinstance(name, formats.Format) else formats.get(name)
+    OUT_W, OUT_H = ACTIVE.out_w, ACTIVE.out_h
+    LOGICAL_W, LOGICAL_H = OUT_W, OUT_H
+    RENDER_W, RENDER_H = ACTIVE.render_w, ACTIVE.render_h
+    SCALE = RENDER_W / LOGICAL_W
+    font.cache_clear()        # cached sizes were scaled for the old format
+    return ACTIVE
 
 # --- palette ----------------------------------------------------------------
 NAVY = (15, 27, 46)               # #0F1B2E  base background

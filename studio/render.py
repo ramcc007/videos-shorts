@@ -11,7 +11,7 @@ from pathlib import Path
 from PIL import Image
 
 from . import draw, photos, theme
-from .theme import FPS, OUT_H, OUT_W
+from .theme import FPS
 
 ZOOM_MAX = 1.13          # Ken Burns push-in end zoom
 ZOOM_PAN = 1.10          # zoom held while panning
@@ -95,7 +95,7 @@ def make_clips(stills: list[Path], durations: list[float], clips_dir: Path) -> l
         frames = max(2, int(round(dur * FPS)))
         z, x, y = _kenburns(i, frames)
         clip = clips_dir / f"{i:03d}.mp4"
-        vf = (f"zoompan=z='{z}':x='{x}':y='{y}':d=1:s={OUT_W}x{OUT_H}:fps={FPS},"
+        vf = (f"zoompan=z='{z}':x='{x}':y='{y}':d=1:s={theme.OUT_W}x{theme.OUT_H}:fps={FPS},"
               f"format=yuv420p")
         ff(["-loop", "1", "-framerate", str(FPS), "-t", f"{frames/FPS:.4f}",
             "-i", str(still), "-vf", vf, "-frames:v", str(frames),
@@ -145,7 +145,7 @@ def make_shot_clips(shots: list[dict], stills: list[Path], durations: list[float
 def _kenburns_clip(still: Path, dur: float, index: int, clip: Path) -> Path:
     frames = max(2, int(round(dur * FPS)))
     z, x, y = _kenburns(index, frames)
-    vf = (f"zoompan=z='{z}':x='{x}':y='{y}':d=1:s={OUT_W}x{OUT_H}:fps={FPS},"
+    vf = (f"zoompan=z='{z}':x='{x}':y='{y}':d=1:s={theme.OUT_W}x{theme.OUT_H}:fps={FPS},"
           f"format=yuv420p")
     ff(["-loop", "1", "-framerate", str(FPS), "-t", f"{frames/FPS:.4f}",
         "-i", str(still), "-vf", vf, "-frames:v", str(frames),

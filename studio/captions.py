@@ -9,8 +9,8 @@ from pathlib import Path
 
 from . import theme
 
-MAX_CHARS = 44        # per line, before wrapping to a second row
 MAX_LINES = 2
+WORDS_PER_GROUP = 3   # Shorts: how many words pop at once
 
 
 def _ass_colour(rgb: tuple[int, int, int], alpha: int = 0) -> str:
@@ -26,10 +26,38 @@ def _ts(seconds: float) -> str:
     return f"{h}:{m:02d}:{s:05.2f}"
 
 
-def _wrap(text: str) -> str:
+def _groups(text: str, per: int = WORDS_PER_GROUP) -> list[str]:
+    """Split a line into small word groups for punchy Shorts captions."""
+    words = text.split()
+    return [" ".join(words[i:i + per]) for i in range(0, len(words), per)] or [text]
+
+
+def _split_by_length(text: str, start: float, end: float,
+                     per: int = WORDS_PER_GROUP) -> list[tuple[float, float, str]]:
+    """Time each word group within a line, in proportion to its length.
+
+    We already know exactly when each narration line starts and ends, so word
+    timing needs no forced-alignment model: distributing the line's duration by
+    character count is accurate to a few hundredths of a second at speech pace,
+    and costs nothing to compute.
+    """
+    groups = _groups(text, per)
+    weights = [max(1, len(g)) for g in groups]
+    total = sum(weights)
+    span = max(0.05, end - start)
+    out, t = [], start
+    for g, w in zip(groups, weights):
+        dur = span * w / total
+        out.append((t, t + dur, g))
+        t += dur
+    out[-1] = (out[-1][0], end, out[-1][2])      # absorb rounding into the last
+    return out
+
+
+def _wrap(text: str, max_chars: int) -> str:
     words, lines, cur = text.split(), [], ""
     for w in words:
-        if len(cur) + len(w) + 1 <= MAX_CHARS or not cur:
+        if len(cur) + len(w) + 1 <= max_chars or not cur:
             cur = f"{cur} {w}".strip()
         else:
             lines.append(cur)
@@ -49,22 +77,32 @@ def _escape(text: str) -> str:
 
 
 def write_ass(times: list[dict], out_path: Path, style: str = "body") -> Path:
+    fmt = theme.ACTIVE
     family = theme.caption_font_family()
     primary = _ass_colour(theme.INK)
-    box = _ass_colour(theme.NAVY_LO, alpha=0x55)      # semi-transparent navy plate
-    outline = _ass_colour((0, 0, 0), alpha=0x30)
+    if fmt.caption_boxed:
+        # long-form: a soft navy plate keeps text legible over charts
+        border_style, box = 3, _ass_colour(theme.NAVY_LO, alpha=0x55)
+        outline_w, shadow_w = 14, 0
+        outline = _ass_colour((0, 0, 0), alpha=0x30)
+    else:
+        # Shorts: outlined text with a drop shadow floats over moving footage
+        # far better than a hard slab, and is what the format's viewers expect.
+        border_style, box = 1, _ass_colour((0, 0, 0), alpha=0x00)
+        outline_w, shadow_w = 6, 3
+        outline = _ass_colour((0, 0, 0), alpha=0x00)
 
     header = f"""[Script Info]
 ScriptType: v4.00+
-PlayResX: 1920
-PlayResY: 1080
+PlayResX: {theme.LOGICAL_W}
+PlayResY: {theme.LOGICAL_H}
 WrapStyle: 2
 ScaledBorderAndShadow: yes
 YCbCr Matrix: TV.709
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Body,{family},50,{primary},{primary},{outline},{box},-1,0,0,0,100,100,0.4,0,3,14,0,2,220,220,64,1
+Style: Body,{family},{fmt.caption_size},{primary},{primary},{outline},{box},-1,0,0,0,100,100,0.4,0,{border_style},{outline_w},{shadow_w},{fmt.caption_align},{fmt.margin},{fmt.margin},{fmt.caption_margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -74,9 +112,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         text = _escape(t.get("text", "")).strip()
         if not text:
             continue
-        rows.append(
-            f"Dialogue: 0,{_ts(t['start'])},{_ts(t['end'])},Body,,0,0,0,,{_wrap(text)}"
-        )
+        if fmt.name == "short":
+            # a few words at a time, timed within the line we already know
+            for a, b, group in _split_by_length(text, t["start"], t["end"]):
+                rows.append(f"Dialogue: 0,{_ts(a)},{_ts(b)},Body,,0,0,0,,"
+                            f"{_wrap(group, fmt.caption_max_chars)}")
+        else:
+            rows.append(f"Dialogue: 0,{_ts(t['start'])},{_ts(t['end'])},Body,,0,0,0,,"
+                        f"{_wrap(text, fmt.caption_max_chars)}")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(header + "\n".join(rows) + "\n", encoding="utf-8")
     return out_path

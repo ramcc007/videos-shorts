@@ -112,6 +112,7 @@ Useful flags:
 | `--no-photos` | skip Wikimedia downloads; photo shots become text cards |
 | `--music path` | pick a specific bed |
 | `--force-stills` | redraw stills that already exist |
+| `--format short` | render 9:16 1080x1920 instead of 16:9 |
 
 ## 5. Make your own video
 

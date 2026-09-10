@@ -26,7 +26,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from studio import config, plan, presenter, script, state  # noqa: E402
+from studio import config, formats, plan, presenter, script, state  # noqa: E402
 
 ROOT = config.ROOT
 POLL = 15          # seconds between checks while watching for the Flow clips
@@ -50,25 +50,34 @@ def cmd_new(args) -> None:
     run_step(["tools/new_video.py", topic] + (["--force"] if args.force else []),
              f"scaffolding videos/{topic}")
 
-    b = plan.budget(args.duration)
+    fmt = formats.get(args.format)
+    presenter_on = fmt.presenter_default if args.presenter is None else args.presenter
+    b = plan.budget(args.duration, args.format, presenter_on)
     st = state.load(topic)
     st["brief"] = {"topic": topic, "duration_s": args.duration,
+                   "format": args.format, "presenter": presenter_on,
                    "notes": args.notes or "", "budget": b.as_dict()}
     state.save(topic, st)
     state.mark(topic, "brief", f"{args.duration:.0f}s target")
     (vdir / "brief.json").write_text(json.dumps(st["brief"], indent=2) + "\n",
                                      encoding="utf-8")
 
+    shape = (f"hook {b.hook_s:.0f}s + body {b.body_s:.0f}s + close {b.close_s:.0f}s"
+             if presenter_on else f"body {b.body_s:.0f}s, no presenter")
+    cost = ("~40 Flow credits" if presenter_on else
+            "NO Flow credits -- free at the margin")
     print(f"""
 === brief: {topic} ===
-  duration      {b.target_s:.0f}s  (hook 8s + body {b.body_s:.0f}s + close 8s)
+  format        {fmt.name} ({fmt.aspect})
+  duration      {b.target_s:.0f}s  ({shape})
   shot budget   {b.shots} shots, ~{b.seconds_per_shot:.1f}s each
   word budget   {b.words_total} words of narration (~{b.words_per_shot} per shot)
+  presenter     {'yes' if presenter_on else 'no'}  ({cost})
   notes         {args.notes or '(none)'}
 
 Next: the script goes in
   videos/{topic}/body/build_body.py
-Fill in SHOTS, HOOK and CLOSE, then:
+Fill in SHOTS{', HOOK and CLOSE' if presenter_on else ' (HOOK/CLOSE not needed)'}, then:
   python tools/make_video.py check --topic {topic}
 """)
 
@@ -76,7 +85,10 @@ Fill in SHOTS, HOOK and CLOSE, then:
 def cmd_check(args) -> None:
     topic = args.topic
     st = state.load(topic)
-    target = args.duration or st.get("brief", {}).get("duration_s")
+    brief = st.get("brief", {})
+    target = args.duration or brief.get("duration_s")
+    fmt = args.format or brief.get("format", "long")
+    presenter_on = brief.get("presenter", formats.get(fmt).presenter_default)
     if not target:
         raise SystemExit("No target duration. Pass --duration or run `new` first.")
 
@@ -88,24 +100,32 @@ def cmd_check(args) -> None:
     print(f"\n=== script check: {topic} ===")
     print(shotlib.summary(mod.SHOTS))
     print()
-    print(plan.report(lines, target))
+    print(plan.report(lines, target, fmt, presenter_on))
 
-    for name in ("HOOK", "CLOSE"):
-        val = getattr(mod, name, "")
-        if not val or val.startswith("Write the"):
-            print(f"  WARNING: {name} is still the placeholder.")
+    if presenter_on:
+        for name in ("HOOK", "CLOSE"):
+            val = getattr(mod, name, "")
+            if not val or val.startswith("Write the"):
+                print(f"  WARNING: {name} is still the placeholder.")
 
-    c = plan.check(lines, target)
+    c = plan.check(lines, target, fmt, presenter_on)
     if c["within_tolerance"]:
         state.mark(topic, "script", f"{c['estimated_total_s']:.0f}s est, "
-                                    f"{len(lines)} shots")
-        print(f"\nNext:  python tools/make_video.py flow --topic {topic}")
+                                    f"{len(lines)} shots, {fmt}")
+        nxt = "flow" if presenter_on else "run"
+        print(f"\nNext:  python tools/make_video.py {nxt} --topic {topic}")
     else:
         print("\nAdjust the narration, then run check again.")
 
 
 def cmd_flow(args) -> None:
     topic = args.topic
+    brief = state.load(topic).get("brief", {})
+    if brief and not brief.get("presenter", True):
+        raise SystemExit(
+            f"{topic} is set up without a presenter, so there are no Flow prompts.\n"
+            f"  Render it:  python tools/make_video.py run --topic {topic}\n"
+            f"  Or re-brief with --presenter to add a hook and close.")
     mod = script.load(topic)
     path = presenter.write_sheet(topic, mod.HOOK, mod.CLOSE)
     print(presenter.sheet(mod.HOOK, mod.CLOSE, topic))
@@ -150,6 +170,33 @@ def cmd_watch(args) -> None:
 def cmd_run(args) -> None:
     topic = args.topic
     vdir = config.video_dir(topic)
+    brief = state.load(topic).get("brief", {})
+    fmt = args.format or brief.get("format", "long")
+    presenter_on = brief.get("presenter", formats.get(fmt).presenter_default)
+
+    _warn_if_off_target(topic, fmt, presenter_on)
+
+    if not presenter_on:
+        # No Flow clips, so no clip cleanup, no voice reference to clone from,
+        # and nothing to stitch: the body IS the video. Narration comes from
+        # the local Kokoro voice, which costs nothing.
+        suffix = "" if fmt == "long" else f"_{fmt}"
+        voice = ["--voice", args.voice] if args.voice else ["--voice", "kokoro"]
+        run_step([f"videos/{topic}/body/build_body.py", "--format", fmt, *voice],
+                 f"rendering the {fmt} body (no presenter)")
+        state.mark(topic, "body")
+        final = vdir / "out" / f"body{suffix}.mp4"
+        _write_upload_notes(topic)
+        print(f"""
+=== done: {topic} ===
+  cut           {final}
+  contact sheet {vdir / 'out' / f'contact_sheet{suffix}.png'}
+  upload notes  {vdir / 'out' / 'upload.md'}
+
+No Flow credits were spent on this one.
+Tick the synthetic-content disclosure on upload.
+""")
+        return
 
     if not _clips_ready(topic):
         raise SystemExit(
@@ -181,7 +228,8 @@ def cmd_run(args) -> None:
             state.mark(topic, "match_eq")
 
     body_args = ["--voice", "silent"] if args.skip_voice else ["--reuse-voice"]
-    run_step([f"videos/{topic}/body/build_body.py", *body_args], "rendering the body")
+    run_step([f"videos/{topic}/body/build_body.py", "--format", fmt, *body_args],
+             "rendering the body")
     state.mark(topic, "body")
 
     run_step(["tools/stitch.py", "--topic", topic], "stitching the three parts")
@@ -200,6 +248,22 @@ def cmd_run(args) -> None:
 Watch the two joins before you publish, and tick the synthetic-content
 disclosure on upload.
 """)
+
+
+def _warn_if_off_target(topic: str, fmt: str, presenter_on: bool) -> None:
+    """Rendering an off-target script wastes a render; say so before it starts."""
+    brief = state.load(topic).get("brief", {})
+    target = brief.get("duration_s")
+    if not target:
+        return
+    try:
+        c = plan.check(script.lines(topic), target, fmt, presenter_on)
+    except SystemExit:
+        return
+    if not c["within_tolerance"]:
+        print(f"\n  WARNING: script is {c['drift_s']:+.0f}s off a {target:.0f}s target "
+              f"({c['drift_pct']:+.0f}%). Rendering anyway.\n"
+              f"           Fix it with: python tools/make_video.py check --topic {topic}\n")
 
 
 def _write_upload_notes(topic: str) -> None:
@@ -270,12 +334,17 @@ def main() -> None:
 
     n = common(sub.add_parser("new", help="start a video from topic/duration/notes"))
     n.add_argument("--duration", type=float, required=True, help="target seconds")
+    n.add_argument("--format", choices=("long", "short"), default="long",
+                   help="long = 16:9 1080p, short = 9:16 1080x1920")
+    n.add_argument("--presenter", action=argparse.BooleanOptionalAction, default=None,
+                   help="Flow hook and close (default: on for long, off for short)")
     n.add_argument("--notes", help="angle, audience, tone, must-mentions")
     n.add_argument("--force", action="store_true")
     n.set_defaults(func=cmd_new)
 
     c = common(sub.add_parser("check", help="does the script hit the target duration?"))
     c.add_argument("--duration", type=float)
+    c.add_argument("--format", choices=("long", "short"))
     c.set_defaults(func=cmd_check)
 
     common(sub.add_parser("flow", help="print the Flow prompts")).set_defaults(func=cmd_flow)
@@ -285,6 +354,8 @@ def main() -> None:
         s = common(sub.add_parser(name, help=helptext))
         s.add_argument("--skip-voice", action="store_true",
                        help="draft voice instead of the Kaggle clone")
+        s.add_argument("--format", choices=("long", "short"))
+        s.add_argument("--voice", choices=("chatterbox", "kokoro", "silent"))
         s.add_argument("--force", action="store_true", help="redo completed steps")
         s.set_defaults(func=fn)
 

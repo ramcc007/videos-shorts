@@ -110,6 +110,45 @@ fix is to attach the right dataset -- never to unset the flags.
 `tools/gpu_probe.py` answers step 0: local GPU with 12 GB+ means generate
 locally; otherwise Kaggle's free T4. CPU-only is not viable at hours per clip.
 
+## Output formats and cost
+
+`studio/formats.py` holds one profile per output shape. `theme.use_format()`
+rebinds the canvas and every layout constant, so one `build_body.py` renders
+either. Read dimensions as `theme.OUT_W`, never `from .theme import OUT_W` --
+the latter captures whatever format was active at import.
+
+| | `long` | `short` |
+|---|---|---|
+| canvas | 1920x1080 | 1080x1920 |
+| pace | ~8 s/shot | ~4 s/shot |
+| captions | navy plate, full lines | outlined text, 3-word groups |
+| presenter | on by default | **off** by default |
+| marginal cost | ~40 Flow credits | **zero** |
+
+**Cost is the reason Shorts default to no presenter.** Flow credits come from a
+monthly grant that does not roll over, so they -- not money -- are the binding
+constraint on output. A hook and close also eat 16 s of a 60 s Short. Without
+them a Short costs nothing at the margin and volume is capped only by the free
+Kaggle GPU quota. Turn one on per video with `--presenter`.
+
+Two more decisions made on cost grounds:
+
+- **Kokoro is the production voice for Shorts**, not just a draft. It runs
+  locally on CPU, needs no Kaggle job, and its weights come from the
+  kokoro-onnx **GitHub releases** page, which satisfies the no-Hugging-Face
+  rule. The Chatterbox clone still applies wherever there is a Flow presenter
+  to clone from.
+- **No Whisper for captions.** One shot is one narration line, so each line's
+  start and end are already known exactly; word-group timings come from
+  distributing that span by character count. Accurate to a few hundredths of a
+  second at speech pace, and it costs nothing to compute. Adding a
+  transcription model here would spend GPU time to recover timings we were
+  handed for free.
+
+Per-format outputs are suffixed (`body_short.mp4`, `contact_sheet_short.png`,
+`stills_short/`) so one topic can hold both cuts without either clobbering the
+other.
+
 ## Open items
 
 - [ ] Run `python tools/kaggle_run.py --job smoke` against the real account.
@@ -127,6 +166,9 @@ locally; otherwise Kaggle's free T4. CPU-only is not viable at hours per clip.
 - [ ] Drop a CC0/CC BY music bed into `assets/music/`.
 - [ ] Optional: install `kokoro-onnx` for local draft narration.
 - [ ] Fill in `presenter.json` with the real Maya, once her Flow character exists.
+- [ ] `pip install kokoro-onnx soundfile` and drop the two model files from the
+      kokoro-onnx GitHub releases into the project root. Until then every
+      render falls back to silent narration.
 - [ ] Authorize a YouTube channel in vidIQ (currently none), for channel-aware
       title scoring and the analytics tools.
 

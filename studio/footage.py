@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw
 
 from . import draw as drawmod
 from . import render, theme
-from .theme import FPS, OUT_H, OUT_W
+from .theme import FPS
 
 MAX_SPEED_SHIFT = 0.15     # beyond +/-15% a speed change reads as slow motion
 
@@ -54,8 +54,8 @@ def conform(src: Path, out: Path, want_seconds: float,
     mode, factor = plan_fit(src_seconds, want_seconds)
     frames = _frames_needed(want_seconds)
 
-    scale = (f"scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase:flags=lanczos,"
-             f"crop={OUT_W}:{OUT_H},setsar=1")
+    scale = (f"scale={theme.OUT_W}:{theme.OUT_H}:force_original_aspect_ratio=increase:flags=lanczos,"
+             f"crop={theme.OUT_W}:{theme.OUT_H},setsar=1")
     if sharpen:
         scale += ",unsharp=5:5:0.8:3:3:0.4"
 
@@ -114,7 +114,7 @@ def headline_overlay(shot: dict, out_png: Path) -> Path | None:
         d.text((drawmod.px(drawmod.MARGIN), drawmod.px(y)), ln, font=fnt, fill=theme.INK)
         y += 62
     out_png.parent.mkdir(parents=True, exist_ok=True)
-    img.resize((OUT_W, OUT_H), Image.LANCZOS).save(out_png)
+    img.resize((theme.OUT_W, theme.OUT_H), Image.LANCZOS).save(out_png)
     return out_png
 
 

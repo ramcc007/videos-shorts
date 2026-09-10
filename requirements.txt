@@ -6,6 +6,10 @@ pillow>=10.2          # all chart/card drawing
 requests>=2.31        # Wikimedia Commons photo fetch
 kaggle>=1.6           # notebook push / status / output  (2.2.x also supported)
 
-# Optional: local draft narration without spending a Kaggle GPU hour.
+# Optional but recommended: local narration, free and offline. For Shorts this
+# is the PRODUCTION voice, not just a draft -- it needs no GPU and no Kaggle job.
 #   pip install kokoro-onnx soundfile
-# Without it, `build_body.py` falls back to --voice silent for layout drafts.
+# Model files: take kokoro-v1.0.onnx and voices-v1.0.bin from the kokoro-onnx
+# GitHub releases page and put them in the project root. GitHub releases, not
+# Hugging Face -- this project does not depend on the Hub.
+# Without it, `build_body.py` falls back to --voice silent.

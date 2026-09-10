@@ -16,17 +16,28 @@ from PIL import Image, ImageDraw, ImageFilter
 
 from . import theme
 from .theme import (AMBER, BLUE, GREEN, INK, INK_2, INK_3, NAVY, NAVY_HI,
-                    NAVY_LO, PANEL, PANEL_EDGE, RED, RENDER_H, RENDER_W, SERIES)
+                    NAVY_LO, PANEL, PANEL_EDGE, RED, SERIES)
 
-MARGIN = 110          # logical px
-HEAD_Y = 108
-BODY_TOP = 330
-# Nothing may be drawn below BODY_BOTTOM: the burned-in caption plate owns the
-# bottom of the frame (two 50px lines + padding + a 64px margin ~= y 876 up).
-# Charts that hang labels *below* their baseline subtract further, see LABEL_ROOM.
-BODY_BOTTOM = 858
-LABEL_ROOM = 74
-CONTENT_W = 1920 - 2 * MARGIN
+# Layout follows the ACTIVE format, so these are functions rather than
+# constants. Nothing may be drawn below theme.ACTIVE.body_bottom: the burned-in caption
+# plate owns the bottom of the frame. Charts that hang labels *below* their
+# baseline subtract theme.ACTIVE.label_room further.
+
+
+def W() -> int:
+    return theme.LOGICAL_W
+
+
+def H() -> int:
+    return theme.LOGICAL_H
+
+
+def MARGIN_() -> int:
+    return theme.ACTIVE.margin
+
+
+def CONTENT_W_() -> int:
+    return theme.LOGICAL_W - 2 * theme.ACTIVE.margin
 
 
 def px(v: float) -> int:
@@ -42,16 +53,16 @@ def _f(size: int, weight: str = "regular"):
 # --------------------------------------------------------------------------- #
 def background() -> Image.Image:
     """Dark navy vertical gradient with a soft corner glow."""
-    img = Image.new("RGB", (RENDER_W, RENDER_H), NAVY)
+    img = Image.new("RGB", (theme.RENDER_W, theme.RENDER_H), NAVY)
     d = ImageDraw.Draw(img)
-    for y in range(RENDER_H):
-        t = y / max(1, RENDER_H - 1)
+    for y in range(theme.RENDER_H):
+        t = y / max(1, theme.RENDER_H - 1)
         # ease-out so the top third stays lighter, like the reference deck
         t = t ** 0.85
         c = tuple(int(NAVY_HI[i] + (NAVY_LO[i] - NAVY_HI[i]) * t) for i in range(3))
-        d.line([(0, y), (RENDER_W, y)], fill=c)
+        d.line([(0, y), (theme.RENDER_W, y)], fill=c)
 
-    glow = Image.new("RGB", (RENDER_W, RENDER_H), (0, 0, 0))
+    glow = Image.new("RGB", (theme.RENDER_W, theme.RENDER_H), (0, 0, 0))
     gd = ImageDraw.Draw(glow)
     gd.ellipse([px(1250), px(-420), px(2400), px(560)], fill=(26, 52, 84))
     glow = glow.filter(ImageFilter.GaussianBlur(px(150)))
@@ -88,29 +99,29 @@ def text(d, xy, s, fnt, fill=INK, anchor="la") -> None:
 
 def header(d, shot: dict, max_lines: int = 2) -> float:
     """Draw the kicker + headline. Returns the logical y where content may start."""
-    y = HEAD_Y
+    y = theme.ACTIVE.head_y
     kicker = shot.get("kicker")
     if kicker:
-        text(d, (MARGIN, y), kicker.upper(), _f(20, "bold"), BLUE)
+        text(d, (MARGIN_(), y), kicker.upper(), _f(20, "bold"), BLUE)
         y += 42
 
     fnt = _f(56, "bold")
-    lines = wrap(shot.get("headline", ""), fnt, CONTENT_W)[:max_lines]
+    lines = wrap(shot.get("headline", ""), fnt, CONTENT_W_())[:max_lines]
     for ln in lines:
-        text(d, (MARGIN, y), ln, fnt, INK)
+        text(d, (MARGIN_(), y), ln, fnt, INK)
         y += 70
     y += 6
 
     sub = shot.get("sub")
     if sub:
         sfnt = _f(30)
-        for ln in wrap(sub, sfnt, CONTENT_W - 260)[:2]:
-            text(d, (MARGIN, y), ln, sfnt, INK_2)
+        for ln in wrap(sub, sfnt, CONTENT_W_() - 260)[:2]:
+            text(d, (MARGIN_(), y), ln, sfnt, INK_2)
             y += 42
 
-    d.line([px(MARGIN), px(y + 18), px(MARGIN + 120), px(y + 18)],
+    d.line([px(MARGIN_()), px(y + 18), px(MARGIN_() + 120), px(y + 18)],
            fill=BLUE, width=px(4))
-    return max(y + 60, BODY_TOP)
+    return max(y + 60, theme.ACTIVE.body_top)
 
 
 def _nice_bounds(lo: float, hi: float) -> tuple[float, float]:
@@ -151,21 +162,21 @@ def card(shot: dict) -> Image.Image:
     bullets = shot.get("bullets") or []
     if bullets:
         bf = _f(34)
-        wrapped = [wrap(b, bf, CONTENT_W - 60)[:2] for b in bullets[:5]]
+        wrapped = [wrap(b, bf, CONTENT_W_() - 60)[:2] for b in bullets[:5]]
         block_h = sum(48 * len(w) + 22 for w in wrapped) - 22
-        y = max(y, top_of(y) + (BODY_BOTTOM - top_of(y) - block_h) / 2)
+        y = max(y, top_of(y) + (theme.ACTIVE.body_bottom - top_of(y) - block_h) / 2)
         for w in wrapped:
-            rounded(d, (MARGIN, y + 8, MARGIN + 14, y + 22), 7, fill=BLUE)
+            rounded(d, (MARGIN_(), y + 8, MARGIN_() + 14, y + 22), 7, fill=BLUE)
             for j, ln in enumerate(w):
-                text(d, (MARGIN + 44, y), ln, bf, INK_2 if j else INK)
+                text(d, (MARGIN_() + 44, y), ln, bf, INK_2 if j else INK)
                 y += 48
             y += 22
     elif shot.get("body"):
         bf = _f(38)
-        lines = wrap(shot["body"], bf, CONTENT_W - 200)[:6]
-        y = max(y, top_of(y) + (BODY_BOTTOM - top_of(y) - 56 * len(lines)) / 2)
+        lines = wrap(shot["body"], bf, CONTENT_W_() - 200)[:6]
+        y = max(y, top_of(y) + (theme.ACTIVE.body_bottom - top_of(y) - 56 * len(lines)) / 2)
         for ln in lines:
-            text(d, (MARGIN, y), ln, bf, INK_2)
+            text(d, (MARGIN_(), y), ln, bf, INK_2)
             y += 56
     return img
 
@@ -175,21 +186,22 @@ def number(shot: dict) -> Image.Image:
     d = ImageDraw.Draw(img)
     kicker = shot.get("kicker") or shot.get("headline", "")
     if kicker:
-        text(d, (960, 300), kicker.upper(), _f(26, "bold"), BLUE, anchor="ma")
+        text(d, (W() / 2, theme.ACTIVE.body_top - 30), kicker.upper(), _f(26, "bold"), BLUE, anchor="ma")
 
     value = str(shot["value"])
     size = 300 if len(value) <= 4 else (230 if len(value) <= 7 else 170)
-    text(d, (960, 380), value, _f(size, "bold"), INK, anchor="ma")
+    text(d, (W() / 2, theme.ACTIVE.body_top + 50), value, _f(size, "bold"), INK, anchor="ma")
 
     sub = shot.get("sub") or shot.get("caption")
     if sub:
         sf = _f(38)
-        yy = 380 + size + 60
-        for ln in wrap(sub, sf, 1300)[:3]:
-            text(d, (960, yy), ln, sf, INK_2, anchor="ma")
+        yy = theme.ACTIVE.body_top + 50 + size + 60
+        for ln in wrap(sub, sf, W() - 4 * MARGIN_())[:3]:
+            text(d, (W() / 2, yy), ln, sf, INK_2, anchor="ma")
             yy += 54
 
-    d.line([px(760), px(345), px(1160), px(345)], fill=RED, width=px(5))
+    d.line([px(W() / 2 - 200), px(theme.ACTIVE.body_top + 15),
+            px(W() / 2 + 200), px(theme.ACTIVE.body_top + 15)], fill=RED, width=px(5))
     return img
 
 
@@ -200,7 +212,7 @@ def bars(shot: dict) -> Image.Image:
     data = list(shot["data"])
     unit = shot.get("unit", "")
 
-    base = BODY_BOTTOM - LABEL_ROOM
+    base = theme.ACTIVE.body_bottom - theme.ACTIVE.label_room
     avail_h = base - top - 70
     peak = max(v for _, v in data)
     floor = min(0, min(v for _, v in data))
@@ -208,9 +220,9 @@ def bars(shot: dict) -> Image.Image:
 
     n = len(data)
     gap = 46 if n <= 5 else 28
-    bw = min(210, (CONTENT_W - gap * (n - 1)) / n)
+    bw = min(210, (CONTENT_W_() - gap * (n - 1)) / n)
     total_w = bw * n + gap * (n - 1)
-    x = MARGIN + (CONTENT_W - total_w) / 2
+    x = MARGIN_() + (CONTENT_W_() - total_w) / 2
 
     highlight = shot.get("highlight")
     for i, (label, v) in enumerate(data):
@@ -226,7 +238,7 @@ def bars(shot: dict) -> Image.Image:
             yy += 34
         x += bw + gap
 
-    d.line([px(MARGIN), px(base + 3), px(1920 - MARGIN), px(base + 3)],
+    d.line([px(MARGIN_()), px(base + 3), px(W() - MARGIN_()), px(base + 3)],
            fill=PANEL_EDGE, width=px(2))
     return img
 
@@ -238,8 +250,8 @@ def line(shot: dict) -> Image.Image:
     data = list(shot["data"])
     unit = shot.get("unit", "")
 
-    base, left = BODY_BOTTOM - LABEL_ROOM + 20, MARGIN + 40
-    right, chart_top = 1920 - MARGIN, top + 40
+    base, left = theme.ACTIVE.body_bottom - theme.ACTIVE.label_room + 20, MARGIN_() + 40
+    right, chart_top = W() - MARGIN_(), top + 40
     peak = max(v for _, v in data)
     floor = min(v for _, v in data)
     span = (peak - floor) or 1
@@ -290,14 +302,14 @@ def rating(shot: dict) -> Image.Image:
     top_v = float(shot.get("max", 5))
 
     rows = len(data)
-    row_h = min(120, (BODY_BOTTOM - top) / max(1, rows))
-    bar_x0, bar_x1 = MARGIN + 470, 1920 - MARGIN - 150
-    y = top + (BODY_BOTTOM - top - row_h * rows) / 2
+    row_h = min(120, (theme.ACTIVE.body_bottom - top) / max(1, rows))
+    bar_x0, bar_x1 = MARGIN_() + W() * 0.245, W() - MARGIN_() - 150
+    y = top + (theme.ACTIVE.body_bottom - top - row_h * rows) / 2
 
     for i, (label, v) in enumerate(data):
         cy = y + row_h / 2
         lf = _f(32)
-        text(d, (MARGIN, cy), str(label)[:34], lf, INK, anchor="lm")
+        text(d, (MARGIN_(), cy), str(label)[:34], lf, INK, anchor="lm")
         rounded(d, (bar_x0, cy - 17, bar_x1, cy + 17), 17, fill=PANEL)
         frac = max(0.0, min(1.0, v / top_v if top_v else 0))
         if frac > 0:
@@ -316,8 +328,8 @@ def pie(shot: dict) -> Image.Image:
     data = list(shot["data"])
     total = sum(v for _, v in data)
 
-    cx, cy = 660, (top + BODY_BOTTOM) / 2
-    r = min(230, (BODY_BOTTOM - top) / 2 - 10)
+    cx, cy = (W() * 0.34, (top + theme.ACTIVE.body_bottom) / 2)
+    r = min(230, (theme.ACTIVE.body_bottom - top) / 2 - 10)
     box = [px(cx - r), px(cy - r), px(cx + r), px(cy + r)]
 
     start = -90.0
@@ -337,10 +349,10 @@ def pie(shot: dict) -> Image.Image:
 
     ly = cy - (len(data) * 62) / 2
     for i, (label, v) in enumerate(data):
-        rounded(d, (1080, ly + 12, 1080 + 26, ly + 38), 7,
+        rounded(d, (W() * 0.56, ly + 12, W() * 0.56 + 26, ly + 38), 7,
                 fill=SERIES[i % len(SERIES)])
-        text(d, (1128, ly + 6), str(label)[:28], _f(30), INK)
-        text(d, (1920 - MARGIN, ly + 6), f"{100*v/total:.0f}%", _f(30, "bold"),
+        text(d, (W() * 0.56 + 48, ly + 6), str(label)[:28], _f(30), INK)
+        text(d, (W() - MARGIN_(), ly + 6), f"{100*v/total:.0f}%", _f(30, "bold"),
              INK_2, anchor="ra")
         ly += 62
     return img
@@ -360,11 +372,11 @@ def photo(shot: dict, image_path: Path | None, credit: str | None = None) -> Ima
     src = Image.open(image_path).convert("RGB")
     # cover-fit
     sw, sh = src.size
-    scale = max(RENDER_W / sw, RENDER_H / sh)
+    scale = max(theme.RENDER_W / sw, theme.RENDER_H / sh)
     src = src.resize((max(1, int(sw * scale)), max(1, int(sh * scale))), Image.LANCZOS)
-    ox = (src.width - RENDER_W) // 2
-    oy = int((src.height - RENDER_H) * 0.38)      # bias up: faces/horizons sit high
-    img = src.crop((ox, oy, ox + RENDER_W, oy + RENDER_H))
+    ox = (src.width - theme.RENDER_W) // 2
+    oy = int((src.height - theme.RENDER_H) * 0.38)      # bias up: faces/horizons sit high
+    img = src.crop((ox, oy, ox + theme.RENDER_W, oy + theme.RENDER_H))
 
     # navy tint + bottom scrim so white text always clears WCAG on any photo
     tint = Image.new("RGB", img.size, NAVY)
@@ -379,16 +391,16 @@ def photo(shot: dict, image_path: Path | None, credit: str | None = None) -> Ima
 
     d = ImageDraw.Draw(img)
     fnt = _f(58, "bold")
-    lines = wrap(shot.get("headline", ""), fnt, CONTENT_W - 200)[:3]
-    y = 1080 - 190 - (len(lines) - 1) * 72
-    d.line([px(MARGIN), px(y - 34), px(MARGIN + 120), px(y - 34)], fill=RED, width=px(5))
+    lines = wrap(shot.get("headline", ""), fnt, CONTENT_W_() - 200)[:3]
+    y = H() - 190 - (len(lines) - 1) * 72
+    d.line([px(MARGIN_()), px(y - 34), px(MARGIN_() + 120), px(y - 34)], fill=RED, width=px(5))
     for ln in lines:
-        text(d, (MARGIN, y), ln, fnt, INK)
+        text(d, (MARGIN_(), y), ln, fnt, INK)
         y += 72
     if shot.get("sub"):
-        text(d, (MARGIN, y + 4), shot["sub"], _f(30), INK_2)
+        text(d, (MARGIN_(), y + 4), shot["sub"], _f(30), INK_2)
     if credit:
-        text(d, (1920 - MARGIN, 1080 - 46), credit[:110], _f(19), INK_3, anchor="ra")
+        text(d, (W() - MARGIN_(), H() - 46), credit[:110], _f(19), INK_3, anchor="ra")
     return img
 
 

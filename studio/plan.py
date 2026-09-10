@@ -12,11 +12,9 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from . import formats
 from .voice import GAP, MIN_LINE, WPM
 
-HOOK_S = 8.0
-CLOSE_S = 8.0
-SECONDS_PER_SHOT = 8.0        # a still held much longer than this goes stale
 TOLERANCE = 0.10              # +/-10% of target is "on time"
 
 
@@ -28,17 +26,30 @@ class Budget:
     words_total: int
     words_per_shot: int
     seconds_per_shot: float
+    fmt: str
+    presenter: bool
+    hook_s: float
+    close_s: float
 
     def as_dict(self) -> dict:
         return asdict(self)
 
 
-def budget(target_s: float) -> Budget:
-    if target_s < 45:
-        raise SystemExit("Target duration under 45s leaves no room for a body "
-                         "after the 8s hook and 8s close.")
-    body_s = target_s - HOOK_S - CLOSE_S
-    shots = max(3, round(body_s / SECONDS_PER_SHOT))
+def budget(target_s: float, fmt: str = "long", presenter: bool | None = None) -> Budget:
+    f = formats.get(fmt)
+    if presenter is None:
+        presenter = f.presenter_default
+    hook_s = f.hook_s if presenter else 0.0
+    close_s = f.close_s if presenter else 0.0
+
+    floor = (hook_s + close_s) + 3 * f.seconds_per_shot
+    if target_s < floor:
+        raise SystemExit(
+            f"Target {target_s:.0f}s is too short for the {fmt} format: "
+            f"{hook_s + close_s:.0f}s of presenter plus a minimum 3 shots "
+            f"needs {floor:.0f}s.")
+    body_s = target_s - hook_s - close_s
+    shots = max(3, round(body_s / f.seconds_per_shot))
     speaking_s = body_s - shots * GAP
     if speaking_s <= 0:
         raise SystemExit("Too many shots for that duration.")
@@ -50,6 +61,10 @@ def budget(target_s: float) -> Budget:
         words_total=words_total,
         words_per_shot=int(round(words_total / shots)),
         seconds_per_shot=round(body_s / shots, 2),
+        fmt=fmt,
+        presenter=presenter,
+        hook_s=hook_s,
+        close_s=close_s,
     )
 
 
@@ -58,10 +73,11 @@ def estimate_body(lines: list[str]) -> float:
     return sum(max(MIN_LINE, len(l.split()) / WPM * 60.0) + GAP for l in lines)
 
 
-def check(lines: list[str], target_s: float) -> dict:
-    b = budget(target_s)
+def check(lines: list[str], target_s: float, fmt: str = "long",
+          presenter: bool | None = None) -> dict:
+    b = budget(target_s, fmt, presenter)
     est_body = estimate_body(lines)
-    est_total = est_body + HOOK_S + CLOSE_S
+    est_total = est_body + b.hook_s + b.close_s
     drift = est_total - target_s
     within = abs(drift) <= target_s * TOLERANCE
     return {
@@ -73,16 +89,22 @@ def check(lines: list[str], target_s: float) -> dict:
         "within_tolerance": within,
         "shots": len(lines),
         "shots_budgeted": b.shots,
+        "format": b.fmt,
+        "aspect": formats.get(b.fmt).aspect,
+        "presenter": b.presenter,
         "words": sum(len(l.split()) for l in lines),
         "words_budgeted": b.words_total,
     }
 
 
-def report(lines: list[str], target_s: float) -> str:
-    c = check(lines, target_s)
+def report(lines: list[str], target_s: float, fmt: str = "long",
+           presenter: bool | None = None) -> str:
+    c = check(lines, target_s, fmt, presenter)
     verdict = "ON TARGET" if c["within_tolerance"] else "OFF TARGET"
     arrow = "too long -- cut" if c["drift_s"] > 0 else "too short -- add"
     out = [
+        f"  format        {c['format']} ({c['aspect']})"
+        + ("  + Flow presenter" if c["presenter"] else "  no presenter (free)"),
         f"  target        {c['target_s']:.0f}s",
         f"  estimated     {c['estimated_total_s']:.0f}s  "
         f"({c['drift_s']:+.0f}s, {c['drift_pct']:+.0f}%)",

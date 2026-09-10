@@ -10,11 +10,13 @@ import argparse
 import time
 from pathlib import Path
 
-from . import captions, config, photos, render, shots as shotlib, voice
+from . import captions, config, photos, render, shots as shotlib, theme, voice
 
 
 def parse_args(argv=None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Render the body of one explainer video.")
+    p.add_argument("--format", choices=("long", "short"), default=None,
+                   help="output format: long = 16:9 1080p, short = 9:16 1080x1920")
     p.add_argument("--reuse-voice", action="store_true",
                    help="use the cloned Chatterbox narration from Kaggle (the real take)")
     p.add_argument("--voice", choices=("chatterbox", "kokoro", "silent"),
@@ -39,19 +41,22 @@ def _default_music(explicit: Path | None) -> Path | None:
     return None
 
 
-def build(topic: str, SHOTS: list[dict], argv=None) -> Path | None:
+def build(topic: str, SHOTS: list[dict], argv=None, fmt: str = "long") -> Path | None:
     args = parse_args(argv)
     render.require_ffmpeg()
+    # CLI wins over the script's own default so one build_body.py can render both
+    theme.use_format(args.format or fmt)
     shotlib.validate(SHOTS)
 
     vdir = config.video_dir(topic)
     bdir = vdir / "body"
+    suffix = "" if theme.ACTIVE.name == "long" else f"_{theme.ACTIVE.name}"
     out_dir = vdir / "out"
-    work = bdir / "_work"
+    work = bdir / f"_work{suffix}"
     for d in (out_dir, work):
         d.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n=== {topic} ===")
+    print(f"\n=== {topic} [{theme.ACTIVE.name} {theme.ACTIVE.aspect}] ===")
     print(shotlib.summary(SHOTS))
 
     # 1. narration ---------------------------------------------------------
@@ -65,7 +70,7 @@ def build(topic: str, SHOTS: list[dict], argv=None) -> Path | None:
 
     # 2. stills ------------------------------------------------------------
     print(f"[2/6] drawing {len(SHOTS)} stills")
-    stills_dir = bdir / "stills"
+    stills_dir = bdir / f"stills{suffix}"
     existing = sorted(stills_dir.glob("*.png"))
     if len(existing) == len(SHOTS) and not args.force_stills:
         print("      reusing existing stills (--force-stills to redraw)")
@@ -82,7 +87,7 @@ def build(topic: str, SHOTS: list[dict], argv=None) -> Path | None:
     # 3. motion ------------------------------------------------------------
     print(f"[3/6] shot clips (generated footage where present, Ken Burns otherwise)")
     t0 = time.time()
-    clips = render.make_shot_clips(SHOTS, stills, durations, bdir / "clips",
+    clips = render.make_shot_clips(SHOTS, stills, durations, bdir / f"clips{suffix}",
                                    bdir / "footage")
     silent_video = render.concat_clips(clips, work / "silent.mp4")
     print(f"      {len(clips)} clips in {time.time()-t0:.0f}s")
@@ -98,12 +103,12 @@ def build(topic: str, SHOTS: list[dict], argv=None) -> Path | None:
 
     # 6. final -------------------------------------------------------------
     print("[6/6] burn captions + mux")
-    body = render.burn_and_mux(silent_video, mixed, ass, out_dir / "body.mp4")
+    body = render.burn_and_mux(silent_video, mixed, ass, out_dir / f"body{suffix}.mp4")
 
     # verification ---------------------------------------------------------
     dur = render.probe_duration(body)
     frames = render.probe_frames(body)
-    expected = sum(max(2, round(d * 25)) for d in durations)
+    expected = sum(max(2, round(d * theme.FPS)) for d in durations)
     drift = dur - narration.total
     print("\n--- checks " + "-" * 52)
     print(f"  duration      {dur:7.2f}s   (narration {narration.total:.2f}s, drift {drift:+.2f}s)")
@@ -117,7 +122,9 @@ def build(topic: str, SHOTS: list[dict], argv=None) -> Path | None:
         ok = False
     print(f"  status        {'PASS' if ok else 'CHECK THE WARNINGS ABOVE'}")
 
-    sheet = render.contact_sheet(body, narration.times, SHOTS, out_dir / "contact_sheet.png")
+    sheet = render.contact_sheet(body, narration.times, SHOTS,
+                                 out_dir / f"contact_sheet{suffix}.png",
+                                 cols=3 if theme.ACTIVE.name == "long" else 5)
     print(f"  contact sheet {sheet}")
     print(f"\nBody ready: {body}")
     if narration.source != "chatterbox":
