@@ -14,9 +14,11 @@ videos/*/flow_prompts.txt
 # --- heavy build artefacts ---
 videos/*/flow/*.mp4
 videos/*/flow/*.mov
-videos/*/body/stills/
-videos/*/body/clips/
-videos/*/body/_work/
+# The trailing * covers the per-format variants (stills_short/, _work_short/,
+# clips_short/ ...) so a new output format cannot leak build artefacts in.
+videos/*/body/stills*/
+videos/*/body/clips*/
+videos/*/body/_work*/
 videos/*/body/footage/
 videos/*/body/footage_zip/
 build/
