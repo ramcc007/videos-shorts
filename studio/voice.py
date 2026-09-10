@@ -18,6 +18,8 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import config
+
 WPM = 165          # measured pace of the Chatterbox output; used for estimates
 GAP = 0.38         # breath between lines
 MIN_LINE = 1.9     # a three-word line still needs time to read
@@ -102,11 +104,15 @@ def kokoro(lines: list[str], out_dir: Path, voice: str = "af_heart") -> Narratio
               file=sys.stderr)
         return silent(lines, out_dir)
 
-    model = out_dir.parent / "kokoro-v1.0.onnx"
-    voices = out_dir.parent / "voices-v1.0.bin"
-    if not model.exists() or not voices.exists():
-        print(f"[voice] Kokoro model files not found next to {model.parent} "
-              "-- falling back to --voice silent.", file=sys.stderr)
+    model, voices, searched = config.kokoro_files()
+    if model is None or voices is None:
+        missing = [n for n, f in ((config.KOKORO_MODEL, model),
+                                  (config.KOKORO_VOICES, voices)) if f is None]
+        print(f"[voice] Kokoro model file(s) missing: {', '.join(missing)}\n"
+              f"        Looked in: {', '.join(str(d) for d in searched)}\n"
+              f"        Download both from the kokoro-onnx GitHub releases page\n"
+              f"        and put them in {config.ROOT}\n"
+              f"        -- falling back to --voice silent.", file=sys.stderr)
         return silent(lines, out_dir)
 
     out_dir.mkdir(parents=True, exist_ok=True)

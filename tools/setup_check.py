@@ -86,7 +86,15 @@ def main() -> int:
 
     try:
         import kokoro_onnx  # noqa: F401
-        line(OK, "kokoro-onnx", "local draft voice available")
+        model, voices, searched = config.kokoro_files()
+        if model and voices:
+            line(OK, "kokoro-onnx", f"local voice ready ({model.parent})")
+        else:
+            missing = [n for n, f in ((config.KOKORO_MODEL, model),
+                                      (config.KOKORO_VOICES, voices)) if f is None]
+            line(WARN, "kokoro-onnx",
+                 f"package installed but {' and '.join(missing)} missing -- "
+                 f"put them in {config.ROOT}")
     except ImportError:
         line(WARN, "kokoro-onnx", "not installed -- drafts fall back to --voice silent")
 

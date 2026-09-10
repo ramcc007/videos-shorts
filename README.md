@@ -76,8 +76,33 @@ Then check everything at once:
 python tools/setup_check.py
 ```
 
-Every line should read `ok`. Two `warn`s are fine: `kokoro-onnx` (optional
-draft voice) and the music bed (see `assets/music/README.md`).
+Every line should read `ok`. One `warn` is fine: the music bed (see
+`assets/music/README.md`).
+
+### The local voice (free, and required for Shorts)
+
+Shorts render with no presenter, so their narration comes from Kokoro running
+locally on your CPU -- no GPU, no Kaggle job, no cost.
+
+```powershell
+pip install kokoro-onnx soundfile
+```
+
+Then download **both** model files from the
+[kokoro-onnx releases page](https://github.com/thewh1teagle/kokoro-onnx/releases)
+and put them in the **project root** (next to `PLAN.md`):
+
+| File | Size |
+|---|---|
+| `kokoro-v1.0.onnx` | ~310 MB |
+| `voices-v1.0.bin` | ~26 MB |
+
+They are shared by every video and are git-ignored. To keep them outside the
+repo, set `STUDIO_KOKORO_DIR` to the folder holding them.
+
+If you use a virtualenv, install into **that** venv -- a global `pip install`
+will not be visible once `.venv` is activated. `python tools/setup_check.py`
+tells you which state you are in.
 
 ## 3. Prove the Kaggle path before trusting it with a real job
 

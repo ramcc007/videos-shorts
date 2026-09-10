@@ -81,5 +81,34 @@ def footage_weights() -> tuple[str, str]:
     return ref, mount
 
 
+KOKORO_MODEL = "kokoro-v1.0.onnx"
+KOKORO_VOICES = "voices-v1.0.bin"
+
+
+def kokoro_files() -> tuple[Path | None, Path | None, list[Path]]:
+    """Find the Kokoro ONNX model and voices file.
+
+    They are ~310 MB and ~26 MB and are shared by every video, so they live
+    once at the project root -- never per video. STUDIO_KOKORO_DIR overrides,
+    for a shared drive or a cache outside the repo.
+
+    Returns (model, voices, searched) with None for anything missing, so the
+    caller can name the exact directories it looked in.
+    """
+    searched = []
+    env = os.environ.get("STUDIO_KOKORO_DIR")
+    if env:
+        searched.append(Path(env).expanduser())
+    searched += [ROOT, ROOT / "assets" / "kokoro"]
+
+    model = voices = None
+    for d in searched:
+        if model is None and (d / KOKORO_MODEL).is_file():
+            model = d / KOKORO_MODEL
+        if voices is None and (d / KOKORO_VOICES).is_file():
+            voices = d / KOKORO_VOICES
+    return model, voices, searched
+
+
 def video_dir(topic: str) -> Path:
     return VIDEOS / topic
