@@ -94,7 +94,7 @@ def main() -> int:
                                       (config.KOKORO_VOICES, voices)) if f is None]
             line(WARN, "kokoro-onnx",
                  f"package installed but {' and '.join(missing)} missing -- "
-                 f"put them in {config.ROOT}")
+                 f"run: python tools/fetch_voice.py")
     except ImportError:
         line(WARN, "kokoro-onnx", "not installed -- drafts fall back to --voice silent")
 

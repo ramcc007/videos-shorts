@@ -88,17 +88,24 @@ locally on your CPU -- no GPU, no Kaggle job, no cost.
 pip install kokoro-onnx soundfile
 ```
 
-Then download **both** model files from the
-[kokoro-onnx releases page](https://github.com/thewh1teagle/kokoro-onnx/releases)
-and put them in the **project root** (next to `PLAN.md`):
+Then fetch the two model files:
+
+```powershell
+python tools/fetch_voice.py
+```
+
+That downloads them into the project root and checks each one's exact byte
+count, so a cut connection or a proxy error page cannot leave you with a file
+that looks right and is not. Re-run it any time; it skips what is already
+correct.
 
 | File | Size |
 |---|---|
-| `kokoro-v1.0.onnx` | ~310 MB |
-| `voices-v1.0.bin` | ~26 MB |
+| `kokoro-v1.0.onnx` | 325.5 MB |
+| `voices-v1.0.bin` | 28.2 MB |
 
-They are shared by every video and are git-ignored. To keep them outside the
-repo, set `STUDIO_KOKORO_DIR` to the folder holding them.
+They are shared by every video and are git-ignored. To keep them off the
+system drive, use `--dir D:/models` and set `STUDIO_KOKORO_DIR` to match.
 
 If you use a virtualenv, install into **that** venv -- a global `pip install`
 will not be visible once `.venv` is activated. `python tools/setup_check.py`

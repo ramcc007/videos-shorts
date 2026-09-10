@@ -166,9 +166,8 @@ other.
 - [ ] Drop a CC0/CC BY music bed into `assets/music/`.
 - [ ] Optional: install `kokoro-onnx` for local draft narration.
 - [ ] Fill in `presenter.json` with the real Maya, once her Flow character exists.
-- [ ] `pip install kokoro-onnx soundfile` and drop the two model files from the
-      kokoro-onnx GitHub releases into the project root. Until then every
-      render falls back to silent narration.
+- [ ] `pip install kokoro-onnx soundfile`, then `python tools/fetch_voice.py`.
+      Until both are done every render falls back to silent narration.
 - [ ] Authorize a YouTube channel in vidIQ (currently none), for channel-aware
       title scoring and the analytics tools.
 

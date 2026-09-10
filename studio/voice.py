@@ -110,8 +110,7 @@ def kokoro(lines: list[str], out_dir: Path, voice: str = "af_heart") -> Narratio
                                   (config.KOKORO_VOICES, voices)) if f is None]
         print(f"[voice] Kokoro model file(s) missing: {', '.join(missing)}\n"
               f"        Looked in: {', '.join(str(d) for d in searched)}\n"
-              f"        Download both from the kokoro-onnx GitHub releases page\n"
-              f"        and put them in {config.ROOT}\n"
+              f"        Get them with:  python tools/fetch_voice.py\n"
               f"        -- falling back to --voice silent.", file=sys.stderr)
         return silent(lines, out_dir)
 
