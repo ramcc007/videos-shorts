@@ -93,6 +93,25 @@ def wrap(text: str, fnt, max_logical_w: int) -> list[str]:
     return lines
 
 
+def fit(s: str, start_size: int, max_logical_w: int, weight: str = "bold",
+        floor: int = 40):
+    """Largest font at or below start_size whose rendering of `s` fits.
+
+    A single unbreakable string -- a big number, mostly -- cannot wrap, so on a
+    narrower canvas it has to shrink instead. Sizes picked for one frame width
+    silently overflow another; measuring is the only thing that holds across
+    every format.
+    """
+    max_w = px(max_logical_w)
+    size = start_size
+    while size > floor:
+        fnt = _f(size, weight)
+        if fnt.getlength(s) <= max_w:
+            return fnt
+        size -= 4
+    return _f(floor, weight)
+
+
 def text(d, xy, s, fnt, fill=INK, anchor="la") -> None:
     d.text((px(xy[0]), px(xy[1])), s, font=fnt, fill=fill, anchor=anchor)
 
@@ -157,9 +176,15 @@ def top_of(y: float) -> float:
 def card(shot: dict) -> Image.Image:
     img = background()
     d = ImageDraw.Draw(img)
-    y = header(d, shot, max_lines=3)
 
     bullets = shot.get("bullets") or []
+    if not bullets and not shot.get("body"):
+        # A card with nothing under the headline is a statement, so set it as
+        # one: centred in the body area and larger. Top-aligning it leaves the
+        # lower two thirds of a 9:16 frame empty.
+        return _statement(img, d, shot)
+
+    y = header(d, shot, max_lines=3)
     if bullets:
         bf = _f(34)
         wrapped = [wrap(b, bf, CONTENT_W_() - 60)[:2] for b in bullets[:5]]
@@ -181,6 +206,38 @@ def card(shot: dict) -> Image.Image:
     return img
 
 
+def _statement(img: Image.Image, d, shot: dict) -> Image.Image:
+    """A headline-only card, centred in the body area."""
+    top, bottom = theme.ACTIVE.body_top - 120, theme.ACTIVE.body_bottom
+    head = shot.get("headline", "")
+
+    # Bigger than a normal header, but shrink if it would need too many lines.
+    size, lines = 76, []
+    while size >= 44:
+        fnt = _f(size, "bold")
+        lines = wrap(head, fnt, CONTENT_W_())
+        if len(lines) <= 4:
+            break
+        size -= 8
+    line_h = size * 1.26
+
+    kicker = shot.get("kicker")
+    block_h = len(lines) * line_h + (58 if kicker else 0)
+    y = top + max(0, (bottom - top - block_h) / 2)
+
+    if kicker:
+        text(d, (W() / 2, y), kicker.upper(), _f(22, "bold"), BLUE, anchor="ma")
+        y += 58
+    for ln in lines:
+        text(d, (W() / 2, y), ln, fnt, INK, anchor="ma")
+        y += line_h
+
+    rule = min(120, W() * 0.12)
+    d.line([px(W() / 2 - rule), px(y + 26), px(W() / 2 + rule), px(y + 26)],
+           fill=BLUE, width=px(4))
+    return img
+
+
 def number(shot: dict) -> Image.Image:
     img = background()
     d = ImageDraw.Draw(img)
@@ -189,19 +246,21 @@ def number(shot: dict) -> Image.Image:
         text(d, (W() / 2, theme.ACTIVE.body_top - 30), kicker.upper(), _f(26, "bold"), BLUE, anchor="ma")
 
     value = str(shot["value"])
-    size = 300 if len(value) <= 4 else (230 if len(value) <= 7 else 170)
-    text(d, (W() / 2, theme.ACTIVE.body_top + 50), value, _f(size, "bold"), INK, anchor="ma")
+    start = 300 if len(value) <= 4 else (230 if len(value) <= 7 else 170)
+    vf = fit(value, start, W() - 2 * MARGIN_())
+    text(d, (W() / 2, theme.ACTIVE.body_top + 50), value, vf, INK, anchor="ma")
 
     sub = shot.get("sub") or shot.get("caption")
     if sub:
         sf = _f(38)
-        yy = theme.ACTIVE.body_top + 50 + size + 60
+        yy = theme.ACTIVE.body_top + 50 + round(vf.size / theme.SCALE) + 60
         for ln in wrap(sub, sf, W() - 4 * MARGIN_())[:3]:
             text(d, (W() / 2, yy), ln, sf, INK_2, anchor="ma")
             yy += 54
 
-    d.line([px(W() / 2 - 200), px(theme.ACTIVE.body_top + 15),
-            px(W() / 2 + 200), px(theme.ACTIVE.body_top + 15)], fill=RED, width=px(5))
+    rule = min(200, W() * 0.19)
+    d.line([px(W() / 2 - rule), px(theme.ACTIVE.body_top + 15),
+            px(W() / 2 + rule), px(theme.ACTIVE.body_top + 15)], fill=RED, width=px(5))
     return img
 
 
