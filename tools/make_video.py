@@ -41,6 +41,24 @@ def run_step(argv: list[str], what: str) -> None:
 
 
 # --------------------------------------------------------------------------- #
+def brief_of(topic: str) -> dict:
+    """The video's brief.
+
+    brief.json is the committed record and travels with a clone. state.json is
+    local progress and is git-ignored, so on a fresh clone it does not exist --
+    reading the brief from there alone made every pulled video look unbriefed,
+    silently falling back to long/presenter and demanding Flow clips.
+    """
+    path = config.video_dir(topic) / "brief.json"
+    if path.is_file():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"  WARNING: {path} is unreadable ({e}); "
+                  f"falling back to state.json", file=sys.stderr)
+    return state.load(topic).get("brief", {})
+
+
 def cmd_new(args) -> None:
     topic = args.topic
     vdir = config.video_dir(topic)
@@ -85,7 +103,7 @@ Fill in SHOTS{', HOOK and CLOSE' if presenter_on else ' (HOOK/CLOSE not needed)'
 def cmd_check(args) -> None:
     topic = args.topic
     st = state.load(topic)
-    brief = st.get("brief", {})
+    brief = brief_of(topic)
     target = args.duration or brief.get("duration_s")
     fmt = args.format or brief.get("format", "long")
     presenter_on = brief.get("presenter", formats.get(fmt).presenter_default)
@@ -120,7 +138,7 @@ def cmd_check(args) -> None:
 
 def cmd_flow(args) -> None:
     topic = args.topic
-    brief = state.load(topic).get("brief", {})
+    brief = brief_of(topic)
     if brief and not brief.get("presenter", True):
         raise SystemExit(
             f"{topic} is set up without a presenter, so there are no Flow prompts.\n"
@@ -170,7 +188,7 @@ def cmd_watch(args) -> None:
 def cmd_run(args) -> None:
     topic = args.topic
     vdir = config.video_dir(topic)
-    brief = state.load(topic).get("brief", {})
+    brief = brief_of(topic)
     fmt = args.format or brief.get("format", "long")
     presenter_on = brief.get("presenter", formats.get(fmt).presenter_default)
 
@@ -252,7 +270,7 @@ disclosure on upload.
 
 def _warn_if_off_target(topic: str, fmt: str, presenter_on: bool) -> None:
     """Rendering an off-target script wastes a render; say so before it starts."""
-    brief = state.load(topic).get("brief", {})
+    brief = brief_of(topic)
     target = brief.get("duration_s")
     if not target:
         return
@@ -276,8 +294,7 @@ def _write_upload_notes(topic: str) -> None:
     seo_path = vdir / "seo.json"
     out = vdir / "out" / "upload.md"
     out.parent.mkdir(parents=True, exist_ok=True)
-    st = state.load(topic)
-    brief = st.get("brief", {})
+    brief = brief_of(topic)
 
     lines = [f"# Upload notes — {topic}", ""]
     if seo_path.exists():
@@ -315,8 +332,7 @@ def _write_upload_notes(topic: str) -> None:
 
 def cmd_status(args) -> None:
     topic = args.topic
-    st = state.load(topic)
-    brief = st.get("brief", {})
+    brief = brief_of(topic)
     print(f"\n=== {topic} ===")
     if brief:
         print(f"  target {brief.get('duration_s')}s   notes: {brief.get('notes') or '(none)'}")
