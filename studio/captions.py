@@ -12,6 +12,9 @@ from . import theme
 MAX_LINES = 2
 WORDS_PER_GROUP = 3   # Shorts: how many words pop at once
 
+# libass override: start at 78% and snap to 100% over 90ms, fading in over 60ms.
+POP = r"{\fscx78\fscy78\alpha&HFF&\t(0,60,\alpha&H00&)\t(0,90,\fscx100\fscy100)}"
+
 
 def _ass_colour(rgb: tuple[int, int, int], alpha: int = 0) -> str:
     r, g, b = rgb
@@ -113,10 +116,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if not text:
             continue
         if fmt.name == "short":
-            # a few words at a time, timed within the line we already know
+            # A few words at a time, timed within the line we already know, each
+            # landing with a scale punch. A caption that simply appears reads as
+            # a subtitle; one that arrives reads as part of the edit.
             for a, b, group in _split_by_length(text, t["start"], t["end"]):
                 rows.append(f"Dialogue: 0,{_ts(a)},{_ts(b)},Body,,0,0,0,,"
-                            f"{_wrap(group, fmt.caption_max_chars)}")
+                            f"{POP}{_wrap(group, fmt.caption_max_chars)}")
         else:
             rows.append(f"Dialogue: 0,{_ts(t['start'])},{_ts(t['end'])},Body,,0,0,0,,"
                         f"{_wrap(text, fmt.caption_max_chars)}")

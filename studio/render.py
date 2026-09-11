@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from . import draw, photos, theme
+from . import draw, motion, photos, theme
 from .theme import FPS
 
 ZOOM_MAX = 1.13          # Ken Burns push-in end zoom
@@ -125,6 +125,12 @@ def make_shot_clips(shots: list[dict], stills: list[Path], durations: list[float
             print(f"  [{i:>2}] WARNING: no footage for clip shot; using the text card. "
                   f"Expected {footage_dir / f'{i:03d}.mp4'}")
 
+        if src is None and shot["kind"] in motion.ANIMATED:
+            _animated_clip(shot, dur, clip)
+            print(f"  [{i:>2}] {shot['kind']:<7} {dur:.2f}s  animated")
+            out.append(clip)
+            continue
+
         if src is not None:
             raw = clips_dir / f"{i:03d}_raw.mp4"
             footagemod.conform(src, raw, dur)
@@ -140,6 +146,35 @@ def make_shot_clips(shots: list[dict], stills: list[Path], durations: list[float
             print(f"  [{i:>2}] {shot['kind']:<7} {dur:.2f}s")
         out.append(clip)
     return out
+
+
+def _animated_clip(shot: dict, dur: float, clip: Path) -> Path:
+    """Render a shot as a frame sequence and encode it.
+
+    Frames are piped straight into ffmpeg as raw RGB rather than written out as
+    PNGs: a 30s Short is ~750 frames, and the disk round-trip costs more than
+    the drawing does.
+    """
+    n = max(2, round(dur * theme.FPS))
+    cmd = ["ffmpeg", "-hide_banner", "-v", "error", "-y",
+           "-f", "rawvideo", "-pix_fmt", "rgb24",
+           "-s", f"{theme.OUT_W}x{theme.OUT_H}", "-r", str(theme.FPS),
+           "-i", "pipe:0",
+           "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+           "-pix_fmt", "yuv420p", "-r", str(theme.FPS), str(clip)]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    try:
+        with theme.native_scale():
+            for f in range(n):
+                # a shot lands its content over the first ~85%, then holds, so the
+                # viewer gets a beat to read before the cut
+                p = min(1.0, (f / max(1, n - 1)) / 0.85)
+                proc.stdin.write(motion.frame(shot, p).tobytes())
+    finally:
+        proc.stdin.close()
+        if proc.wait() != 0:
+            raise SystemExit(f"ffmpeg failed encoding {clip}")
+    return clip
 
 
 def _kenburns_clip(still: Path, dur: float, index: int, clip: Path) -> Path:

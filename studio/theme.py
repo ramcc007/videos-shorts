@@ -5,6 +5,8 @@ import sys
 from functools import lru_cache
 from pathlib import Path
 
+import contextlib
+
 from PIL import ImageFont
 
 from . import formats
@@ -21,6 +23,25 @@ OUT_W, OUT_H = ACTIVE.out_w, ACTIVE.out_h
 LOGICAL_W, LOGICAL_H = OUT_W, OUT_H          # layout units == output pixels
 RENDER_W, RENDER_H = ACTIVE.render_w, ACTIVE.render_h
 SCALE = RENDER_W / LOGICAL_W
+
+
+@contextlib.contextmanager
+def native_scale():
+    """Render 1:1 with the output instead of oversampled.
+
+    The oversample exists so a Ken Burns push never softens a still. Animated
+    shots move their own elements instead of pushing the whole frame, so the
+    extra pixels are pure cost -- about 4x per frame, measured.
+    """
+    global RENDER_W, RENDER_H, SCALE
+    keep = (RENDER_W, RENDER_H, SCALE)
+    RENDER_W, RENDER_H, SCALE = OUT_W, OUT_H, 1.0
+    font.cache_clear()
+    try:
+        yield
+    finally:
+        RENDER_W, RENDER_H, SCALE = keep
+        font.cache_clear()
 
 
 def use_format(name: str | formats.Format) -> formats.Format:
