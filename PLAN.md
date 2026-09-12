@@ -25,7 +25,7 @@ Running notes for the explainer-video pipeline. Updated after every step.
 
 | Piece | State | Proven by |
 |---|---|---|
-| `tools/kaggle_run.py` | built | CLI + auth/username guards exercised; **not yet run against a live Kaggle account** |
+| `tools/kaggle_run.py` | **working** | run live: pushed, polled RUNNING -> COMPLETE in 0.7 min, downloaded output, `gpu_ok: true` |
 | `kaggle/make_smoke_nb.py` | built | generates a valid notebook; every cell compiles |
 | `kaggle/make_voice_nb.py` | built | generates a valid notebook; every cell compiles |
 | `studio/` render engine | **working** | 8-shot, 60 s body rendered end to end |
@@ -179,8 +179,11 @@ notebook uses float16 throughout.
 
 ## Open items
 
-- [ ] Run `python tools/kaggle_run.py --job smoke` against the real account.
-  This is the one path that could not be exercised without live credentials.
+- [x] ~~Run `python tools/kaggle_run.py --job smoke` against the real account.~~
+  **Done.** Passed first run: RUNNING -> COMPLETE in 0.7 min, output downloaded,
+  `gpu_ok: true`. The Kaggle image runs Python 3.12.13, which is what the voice
+  notebook's ensurepip note refers to. The headless path is proven; every other
+  Kaggle job now fails for its own reasons, not the plumbing's.
 - [ ] **Quality gate:** `python tools/kaggle_run.py --job footage-samples --ref <still>`
       then watch the three clips before any further footage work. The notebooks
       in `kaggle/make_footage_nb.py` have never run on a live GPU -- the build
