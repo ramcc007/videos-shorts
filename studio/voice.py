@@ -98,10 +98,14 @@ def kokoro(lines: list[str], out_dir: Path, voice: str = "af_heart") -> Narratio
         import numpy as np
         import soundfile as sf
         from kokoro_onnx import Kokoro
-    except ImportError:
-        print("[voice] kokoro-onnx not installed -- falling back to --voice silent.\n"
-              "        pip install kokoro-onnx soundfile   (and fetch the .onnx + voices file)",
-              file=sys.stderr)
+    except ImportError as e:
+        # Name the module that actually failed: kokoro pulls in numpy and
+        # soundfile, and blaming kokoro for their absence sends you to the
+        # wrong fix.
+        print(f"[voice] cannot use kokoro -- {e.name!r} is not installed.\n"
+              f"        pip install -r requirements.txt kokoro-onnx\n"
+              f"        then: python tools/fetch_voice.py\n"
+              f"        -- falling back to --voice silent.", file=sys.stderr)
         return silent(lines, out_dir)
 
     model, voices, searched = config.kokoro_files()

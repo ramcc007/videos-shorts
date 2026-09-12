@@ -73,6 +73,7 @@ def main() -> int:
             line(BAD, exe, "not on PATH"); problems += 1
 
     for mod, why in (("PIL", "charts and cards"), ("requests", "Wikimedia photos"),
+                     ("numpy", "kokoro narration"), ("soundfile", "narration wavs"),
                      ("kaggle", "GPU voice job")):
         try:
             # the kaggle package prints a wall of auth help on import when it

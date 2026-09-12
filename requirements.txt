@@ -6,6 +6,13 @@ pillow>=10.2          # all chart/card drawing
 requests>=2.31        # Wikimedia Commons photo fetch
 kaggle>=1.6           # notebook push / status / output  (2.2.x also supported)
 
+# Local narration needs these two as well. They are listed here rather than
+# left to the kokoro-onnx install because voice.kokoro() imports them directly,
+# and a missing numpy otherwise surfaces as "kokoro-onnx not installed", which
+# points at the wrong thing.
+numpy>=1.26           # kokoro narration
+soundfile>=0.12       # writing narration wavs
+
 # Optional but recommended: local narration, free and offline. For Shorts this
 # is the PRODUCTION voice, not just a draft -- it needs no GPU and no Kaggle job.
 #   pip install kokoro-onnx soundfile
