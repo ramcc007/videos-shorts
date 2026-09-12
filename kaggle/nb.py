@@ -6,6 +6,15 @@ from pathlib import Path
 
 
 def code(src: str) -> dict:
+    # Cell sources are carried in triple-quoted literals, so a triple quote
+    # inside one closes it early -- and the damage surfaces minutes into a
+    # GPU run, far from its cause. Use # comments in cell code, never
+    # docstrings.
+    if (chr(34) * 3) in src:
+        raise ValueError(
+            'notebook cell source contains a triple quote, which would '
+            'terminate the literal carrying it. Use # comments instead of '
+            'docstrings inside cells.')
     return {"cell_type": "code", "execution_count": None, "metadata": {},
             "outputs": [], "source": src.strip("\n").splitlines(keepends=True)}
 

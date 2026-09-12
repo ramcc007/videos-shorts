@@ -77,7 +77,7 @@ print(subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total",
                      text=True).stdout.strip())
 """),
 
-        nb.code("""
+        nb.code(r"""
 from pathlib import Path
 
 W = Path(CFG["weights"])
@@ -92,7 +92,14 @@ if not W.exists():
 # so search at any depth rather than assuming a layout.
 single = sorted(W.rglob("*.safetensors"))
 is_diffusers = (W / "model_index.json").exists()
-sub = sorted(p.parent for p in W.rglob("model_index.json")) if not is_diffusers else []
+# Prefer the base pipeline. A refiner is img2img-only and cannot start from
+# a prompt, but it ships beside the base model in several datasets and sorts
+# first alphabetically.
+def _rank(p):
+    n = p.name.lower()
+    return (0 if "base" in n else 2 if "refiner" in n else 1, len(str(p)))
+
+sub = sorted((p.parent for p in W.rglob("model_index.json")), key=_rank) if not is_diffusers else []
 print("layout:", "diffusers" if is_diffusers else (f"nested diffusers: {sub[:2]}" if sub
       else f"{len(single)} safetensors file(s)"))
 if not is_diffusers and not sub and not single:
@@ -101,7 +108,7 @@ for f in single[:5]:
     print("  ", f.relative_to(W), f"{f.stat().st_size/1e9:.2f} GB")
 """),
 
-        nb.code("""
+        nb.code(r"""
 import torch
 from diffusers import StableDiffusionXLPipeline
 
@@ -112,6 +119,11 @@ if is_diffusers:
     src, loader = str(W), StableDiffusionXLPipeline.from_pretrained
 elif sub:
     src, loader = str(sub[0]), StableDiffusionXLPipeline.from_pretrained
+    if "refiner" in sub[0].name.lower():
+        raise SystemExit(
+            f"Only a refiner pipeline was found ({sub[0].name}). The refiner "
+            f"cannot generate from a prompt on its own -- it refines an "
+            f"existing image. Attach a dataset containing the BASE model.")
 elif single:
     # from_single_file reads the pipeline config from the Hub, which the
     # offline flags block on purpose. A bare .safetensors therefore cannot be
@@ -140,7 +152,7 @@ pipe.set_progress_bar_config(disable=True)
 print(f"loaded in {time.time()-t0:.0f}s from {src}")
 """),
 
-        nb.code("""
+        nb.code(r"""
 OUT = Path("/kaggle/working")
 made = []
 for seed in CFG["seeds"]:
@@ -156,7 +168,7 @@ for seed in CFG["seeds"]:
     print(f"seed {seed}: {time.time()-t0:.0f}s -> {f.name}")
 """),
 
-        nb.code("""
+        nb.code(r"""
 # One contact sheet so the four can be judged side by side, plus a thumbnail
 # strip: a face that works full-screen can still fail at thumbnail size.
 from PIL import Image
