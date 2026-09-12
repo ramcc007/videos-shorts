@@ -41,19 +41,22 @@ def main() -> int:
 
     if args.set_portrait_weights:
         cfg = config.load()
-        ref = args.set_portrait_weights.strip()
+        ref = config.validate_ref(args.set_portrait_weights, "portrait weights ref")
         cfg["portrait_weights_dataset"] = ref
-        cfg["portrait_weights_dir"] = f"/kaggle/input/{ref.split('/')[-1]}"
+        cfg["portrait_weights_dir"] = config.mount_for(ref)
         config.save(cfg)
-        print(f"Portrait weights dataset: {ref}")
+        kind = "model" if config.is_model_ref(ref) else "dataset"
+        print(f"Portrait weights {kind}: {ref}")
+        print(f"Mounts at:            {cfg['portrait_weights_dir']}")
         return 0
 
     if args.set_weights:
         cfg = config.load()
-        cfg["footage_weights_dataset"] = args.set_weights.strip()
-        cfg["footage_weights_dir"] = f"/kaggle/input/{args.set_weights.strip().split('/')[-1]}"
+        ref = config.validate_ref(args.set_weights, "footage weights ref")
+        cfg["footage_weights_dataset"] = ref
+        cfg["footage_weights_dir"] = config.mount_for(ref)
         config.save(cfg)
-        print(f"Weights dataset: {cfg['footage_weights_dataset']}")
+        print(f"Weights source:  {cfg['footage_weights_dataset']}")
         print(f"Mounts at:       {cfg['footage_weights_dir']}")
         return 0
 

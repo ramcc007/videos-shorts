@@ -134,10 +134,12 @@ def push_kernel(a, user: str, slug: str, notebook: Path, staging: Path,
         "enable_gpu": bool(gpu),
         "enable_tpu": False,
         "enable_internet": bool(internet),
-        "dataset_sources": dataset_refs,
+        # Kaggle models and datasets attach through different fields. A model
+        # ref carries framework/variation/version; a dataset is owner/name.
+        "dataset_sources": [r for r in dataset_refs if not config.is_model_ref(r)],
         "competition_sources": [],
         "kernel_sources": [],
-        "model_sources": [],
+        "model_sources": [r for r in dataset_refs if config.is_model_ref(r)],
     }
     (staging / "kernel-metadata.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
@@ -146,7 +148,8 @@ def push_kernel(a, user: str, slug: str, notebook: Path, staging: Path,
         raise SystemExit(f"{notebook.name} is {size/1e6:.1f} MB; the push limit is about 1 MB. "
                          "Make the notebook download its inputs instead of embedding them.")
     print(f"[kaggle] pushing {ref}  (gpu={gpu} internet={internet} "
-          f"datasets={dataset_refs or 'none'}, {size/1024:.0f} KB)")
+          f"datasets={meta['dataset_sources'] or 'none'} "
+          f"models={meta['model_sources'] or 'none'}, {size/1024:.0f} KB)")
     a.kernels_push(str(staging))
     return ref
 

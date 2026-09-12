@@ -77,8 +77,46 @@ def footage_weights() -> tuple[str, str]:
             "It must be a KAGGLE dataset holding the model weights -- this project\n"
             "does not use Hugging Face. Mirror the weights into your own private\n"
             "Kaggle dataset if no public one exists.")
-    mount = cfg.get("footage_weights_dir") or f"/kaggle/input/{ref.split('/')[-1]}"
-    return ref, mount
+    ref = validate_ref(ref, "footage weights ref")
+    return ref, cfg.get("footage_weights_dir") or mount_for(ref)
+
+
+PLACEHOLDERS = {"owner/slug", "owner/name", "user/slug", "your/dataset"}
+
+
+def validate_ref(ref: str, what: str) -> str:
+    """Reject a ref that was never really set.
+
+    The docs have to show the shape somewhere, and "owner/slug" is what gets
+    pasted. Kaggle then accepts the push and the kernel dies attaching a
+    dataset that does not exist, which costs a run to discover.
+    """
+    ref = (ref or "").strip().strip("/")
+    if ref.lower() in PLACEHOLDERS:
+        raise SystemExit(
+            f"{ref!r} is the placeholder from the docs, not a real {what}.\n"
+            f"Find one:  kaggle models list -s sdxl\n"
+            f"           kaggle datasets list -s 'stable diffusion xl'\n"
+            f"then pass the ref exactly as the 'ref' column prints it.")
+    parts = ref.split("/")
+    if len(parts) < 2 or not all(parts):
+        raise SystemExit(
+            f"{ref!r} is not a valid {what}. Expected 'owner/name' for a Kaggle "
+            f"dataset, or 'owner/model/framework/variation/version' for a Kaggle "
+            f"model.")
+    return ref
+
+
+def is_model_ref(ref: str) -> bool:
+    """Kaggle models carry framework/variation/version; datasets are owner/name."""
+    return len(ref.strip("/").split("/")) >= 3
+
+
+def mount_for(ref: str) -> str:
+    """Where Kaggle mounts an attached source inside the kernel."""
+    parts = ref.strip("/").split("/")
+    # datasets land under their slug; models keep their whole path below the name
+    return "/kaggle/input/" + ("/".join(parts[1:]) if is_model_ref(ref) else parts[-1])
 
 
 def portrait_weights() -> tuple[str, str]:
@@ -101,9 +139,8 @@ def portrait_weights() -> tuple[str, str]:
             "It must be a KAGGLE dataset holding an SDXL checkpoint -- this project\n"
             "does not use Hugging Face. Search Kaggle Models for 'stable diffusion xl',\n"
             "or mirror a checkpoint into your own private Kaggle dataset.")
-    mount = (cfg.get("portrait_weights_dir")
-             or f"/kaggle/input/{ref.split('/')[-1]}")
-    return ref, mount
+    ref = validate_ref(ref, "portrait weights ref")
+    return ref, cfg.get("portrait_weights_dir") or mount_for(ref)
 
 
 KOKORO_MODEL = "kokoro-v1.0.onnx"

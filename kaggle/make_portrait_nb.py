@@ -88,11 +88,15 @@ if not W.exists():
         "Set it locally with: python tools/setup_check.py --set-portrait-weights owner/slug")
 
 # Accept either a diffusers directory or a single .safetensors checkpoint.
+# Kaggle models mount several levels deep (name/framework/variation/version),
+# so search at any depth rather than assuming a layout.
 single = sorted(W.rglob("*.safetensors"))
 is_diffusers = (W / "model_index.json").exists()
-sub = [d for d in W.iterdir() if d.is_dir() and (d / "model_index.json").exists()] if W.is_dir() else []
-print("layout:", "diffusers" if is_diffusers else (f"nested diffusers: {sub}" if sub
+sub = sorted(p.parent for p in W.rglob("model_index.json")) if not is_diffusers else []
+print("layout:", "diffusers" if is_diffusers else (f"nested diffusers: {sub[:2]}" if sub
       else f"{len(single)} safetensors file(s)"))
+if not is_diffusers and not sub and not single:
+    print("TREE:", [str(p.relative_to(W)) for p in list(W.rglob("*"))[:40]])
 for f in single[:5]:
     print("  ", f.relative_to(W), f"{f.stat().st_size/1e9:.2f} GB")
 """),
