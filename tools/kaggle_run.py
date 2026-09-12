@@ -2,6 +2,7 @@
 """Run a notebook on Kaggle with no browser: push, poll, download.
 
     python tools/kaggle_run.py --job smoke
+    python tools/kaggle_run.py --job portrait
     python tools/kaggle_run.py --job voice --topic home-batteries
     python tools/kaggle_run.py --notebook nb.ipynb --slug my-job --inputs dir/ --out out/
 
@@ -248,6 +249,37 @@ def job_voice(args) -> None:
     print(f"(output in {out})")
 
 
+def job_portrait(args) -> None:
+    """Step 5: presenter portrait options, for a human to choose between."""
+    ref, mount = config.portrait_weights()
+    sys.path.insert(0, str(config.ROOT / "kaggle"))
+    import make_portrait_nb
+    from studio import presenter as presmod
+
+    pres = presmod.load()
+    seeds = ([int(x) for x in args.seeds.split(",")] if args.seeds
+             else [11, 22, 33, 44])
+    nb_path = config.ROOT / "build" / "portrait.ipynb"
+    make_portrait_nb.build(nb_path, pres, mount, seeds)
+    print(f"[portrait] {pres.get('name', 'presenter')}, seeds {seeds}")
+
+    out = run(nb_path, "portrait", config.ROOT / "build" / "portrait_out",
+              None, gpu=True, internet=True, timeout_min=args.timeout,
+              extra_datasets=[ref])
+    print(f"""
+Portraits are in {out}. Open contact_sheet.png.
+
+Judge them at BOTH sizes -- the sheet has a thumbnail strip along the bottom,
+because a face that works full-screen can still fail as a thumbnail.
+
+This choice is permanent: the face you pick becomes the channel's presenter and
+appears in every video. If none is right, re-run with different seeds:
+  python tools/kaggle_run.py --job portrait --seeds 7,101,202,303
+
+When one is right, copy it somewhere OUTSIDE the project as a backup -- it
+cannot be regenerated identically later -- then register it as a Flow character.""")
+
+
 def job_footage_samples(args) -> None:
     """The quality gate: three clips, then a human looks at them."""
     ref, mount = config.footage_weights()
@@ -329,12 +361,14 @@ def job_footage(args) -> None:
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--job", choices=("smoke", "voice", "footage-samples", "footage"),
+    p.add_argument("--job", choices=("smoke", "portrait", "voice",
+                                    "footage-samples", "footage"),
                    help="a canned job")
     p.add_argument("--ref", help="reference still for image-to-video "
                                  "(e.g. a frame from a Flow character clip)")
     p.add_argument("--prompt", help="override the sample prompts")
     p.add_argument("--topic", help="video topic, for --job voice")
+    p.add_argument("--seeds", help="comma-separated seeds for --job portrait")
     p.add_argument("--notebook", type=Path, help="run an arbitrary notebook")
     p.add_argument("--slug", help="kernel slug for --notebook")
     p.add_argument("--inputs", type=Path, help="folder to upload as a private dataset")
@@ -346,6 +380,8 @@ def main() -> None:
 
     if args.job == "smoke":
         return job_smoke(args)
+    if args.job == "portrait":
+        return job_portrait(args)
     if args.job == "voice":
         return job_voice(args)
     if args.job == "footage-samples":

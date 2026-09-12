@@ -149,6 +149,34 @@ Per-format outputs are suffixed (`body_short.mp4`, `contact_sheet_short.png`,
 `stills_short/`) so one topic can hold both cuts without either clobbering the
 other.
 
+## The presenter chain (setup guide steps 5-10)
+
+The cloned voice is the end of a chain, not a standalone job. Each link needs
+the one before it:
+
+```
+SDXL portrait on Kaggle   -> tools/kaggle_run.py --job portrait   [BUILT]
+  -> pick one face (permanent, back it up outside the project)    [you]
+  -> register it as a Flow character                              [you]
+  -> generate one clip of the presenter speaking                  [you]
+  -> cut a 15s reference      tools/cut_voice_ref.py              [built]
+  -> clone it       tools/kaggle_run.py --job voice               [built]
+```
+
+Until that chain runs, narration is Kokoro: clear, free, local, and flat.
+Chatterbox cannot clone a voice that does not exist yet.
+
+Portrait weights follow the same no-Hugging-Face rule as the footage model:
+
+```bash
+python tools/setup_check.py --set-portrait-weights owner/slug
+python tools/kaggle_run.py --job portrait            # 4 options, ~6 GPU-minutes
+python tools/kaggle_run.py --job portrait --seeds 7,101,202,303   # if none fit
+```
+
+A T4 and a P100 are both pre-Ampere and have no bfloat16, so the portrait
+notebook uses float16 throughout.
+
 ## Open items
 
 - [ ] Run `python tools/kaggle_run.py --job smoke` against the real account.
@@ -166,6 +194,9 @@ other.
 - [ ] Drop a CC0/CC BY music bed into `assets/music/`.
 - [ ] Optional: install `kokoro-onnx` for local draft narration.
 - [ ] Fill in `presenter.json` with the real Maya, once her Flow character exists.
+- [ ] Find an SDXL checkpoint published as a Kaggle dataset (Kaggle Models has
+      several), then `--set-portrait-weights owner/slug`. This is the one thing
+      blocking `--job portrait`.
 - [ ] `pip install kokoro-onnx soundfile`, then `python tools/fetch_voice.py`.
       Until both are done every render falls back to silent narration.
 - [ ] Authorize a YouTube channel in vidIQ (currently none), for channel-aware

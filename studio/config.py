@@ -81,6 +81,31 @@ def footage_weights() -> tuple[str, str]:
     return ref, mount
 
 
+def portrait_weights() -> tuple[str, str]:
+    """Where the SDXL portrait weights live on Kaggle.
+
+    Same policy as footage_weights: a Kaggle dataset, never Hugging Face. A
+    photoreal SDXL checkpoint in diffusers layout, or a single-file .safetensors
+    the notebook loads with from_single_file.
+
+    Set it with:
+      python tools/setup_check.py --set-portrait-weights owner/slug
+    """
+    cfg = load()
+    ref = (os.environ.get("STUDIO_PORTRAIT_DATASET")
+           or cfg.get("portrait_weights_dataset"))
+    if not ref:
+        raise SystemExit(
+            "No portrait weights dataset configured.\n"
+            "  Set it with:  python tools/setup_check.py --set-portrait-weights owner/slug\n"
+            "It must be a KAGGLE dataset holding an SDXL checkpoint -- this project\n"
+            "does not use Hugging Face. Search Kaggle Models for 'stable diffusion xl',\n"
+            "or mirror a checkpoint into your own private Kaggle dataset.")
+    mount = (cfg.get("portrait_weights_dir")
+             or f"/kaggle/input/{ref.split('/')[-1]}")
+    return ref, mount
+
+
 KOKORO_MODEL = "kokoro-v1.0.onnx"
 KOKORO_VOICES = "voices-v1.0.bin"
 

@@ -32,10 +32,21 @@ def main() -> int:
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--set-kaggle-user", metavar="NAME",
                    help="store your Kaggle username in config.json (git-ignored)")
+    p.add_argument("--set-portrait-weights", metavar="OWNER/SLUG",
+                   help="Kaggle dataset holding the SDXL portrait checkpoint")
     p.add_argument("--set-weights", metavar="OWNER/SLUG",
                    help="Kaggle dataset holding the video-model weights "
                         "(this project does not use Hugging Face)")
     args = p.parse_args()
+
+    if args.set_portrait_weights:
+        cfg = config.load()
+        ref = args.set_portrait_weights.strip()
+        cfg["portrait_weights_dataset"] = ref
+        cfg["portrait_weights_dir"] = f"/kaggle/input/{ref.split('/')[-1]}"
+        config.save(cfg)
+        print(f"Portrait weights dataset: {ref}")
+        return 0
 
     if args.set_weights:
         cfg = config.load()
