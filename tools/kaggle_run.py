@@ -154,7 +154,7 @@ def push_kernel(a, user: str, slug: str, notebook: Path, staging: Path,
     return ref
 
 
-def wait(a, ref: str, timeout_min: int) -> str:
+def wait(a, ref: str, timeout_min: int, log_dir: Path | None = None) -> str:
     print(f"[kaggle] running {ref} -- https://www.kaggle.com/code/{ref}")
     print("[kaggle] output is only published when the run finishes, so we poll status.")
     start = time.time()
@@ -179,11 +179,48 @@ def wait(a, ref: str, timeout_min: int) -> str:
 
         if state in TERMINAL:
             if state != "COMPLETE":
-                raise SystemExit(f"[kaggle] kernel finished as {state}. {message}\n"
-                                 f"Open the log: https://www.kaggle.com/code/{ref}")
+                # An ERROR is still a finished run, so the log IS published --
+                # fetch it. Sending someone to a browser for the traceback is
+                # the worst moment to make them leave the terminal.
+                print(f"[kaggle] kernel finished as {state}. {message}")
+                tail = fetch_log(a, ref, log_dir)
+                raise SystemExit(
+                    (f"\n{tail}\n" if tail else "")
+                    + f"[kaggle] full log: https://www.kaggle.com/code/{ref}")
             print(f"[kaggle] COMPLETE in {elapsed:.1f} min")
             return state
         time.sleep(POLL_SECONDS)
+
+
+def fetch_log(a, ref: str, out_dir: Path | None, lines: int = 40) -> str:
+    """Pull a failed kernel's log and return its tail.
+
+    Best effort: a kernel that died before producing any output can raise here,
+    and losing the real failure behind a secondary one helps nobody.
+    """
+    dest = (out_dir or config.ROOT / "build") / "failed"
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+        a.kernels_output(ref, str(dest), force=True, quiet=True)
+    except Exception as e:                       # noqa: BLE001
+        return f"[kaggle] could not download the log ({e})."
+
+    logs = sorted(dest.glob("*.log"))
+    if not logs:
+        return f"[kaggle] no log file published; saved what there was to {dest}"
+
+    text = logs[-1].read_text(encoding="utf-8", errors="replace")
+    # Kaggle logs are JSON-ish per-line records; pull the message bodies out.
+    out = []
+    for ln in text.splitlines():
+        try:
+            rec = json.loads(ln)
+            out.append(str(rec.get("data", rec.get("text", ln))).rstrip())
+        except (json.JSONDecodeError, TypeError):
+            out.append(ln.rstrip())
+    body = [l for l in out if l.strip()]
+    head = f"--- last {min(lines, len(body))} log lines ({logs[-1]}) ---"
+    return "\n".join([head, *body[-lines:]])
 
 
 def download(a, ref: str, out_dir: Path) -> Path:
@@ -209,7 +246,7 @@ def run(notebook: Path, slug: str, out_dir: Path, inputs: Path | None,
         dataset_refs.append(
             push_dataset(a, user, f"{slug}-inputs", inputs, staging.parent / f"{slug}-inputs"))
     ref = push_kernel(a, user, slug, notebook, staging, gpu, internet, dataset_refs)
-    wait(a, ref, timeout_min)
+    wait(a, ref, timeout_min, out_dir)
     return download(a, ref, out_dir)
 
 

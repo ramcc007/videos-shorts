@@ -136,9 +136,12 @@ def portrait_weights() -> tuple[str, str]:
         raise SystemExit(
             "No portrait weights dataset configured.\n"
             "  Set it with:  python tools/setup_check.py --set-portrait-weights owner/slug\n"
-            "It must be a KAGGLE dataset holding an SDXL checkpoint -- this project\n"
-            "does not use Hugging Face. Search Kaggle Models for 'stable diffusion xl',\n"
-            "or mirror a checkpoint into your own private Kaggle dataset.")
+            "It must be a KAGGLE dataset or model holding SDXL in DIFFUSERS layout:\n"
+            "a model_index.json beside unet/, vae/ and text_encoder/ folders. A bare\n"
+            ".safetensors will not do -- loading one needs a config from Hugging Face,\n"
+            "which this project does not use.\n"
+            "  kaggle datasets list -s 'stable diffusion xl'\n"
+            "  kaggle models list -s sdxl")
     ref = validate_ref(ref, "portrait weights ref")
     return ref, cfg.get("portrait_weights_dir") or mount_for(ref)
 

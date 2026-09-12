@@ -113,7 +113,19 @@ if is_diffusers:
 elif sub:
     src, loader = str(sub[0]), StableDiffusionXLPipeline.from_pretrained
 elif single:
-    src, loader = str(single[0]), StableDiffusionXLPipeline.from_single_file
+    # from_single_file reads the pipeline config from the Hub, which the
+    # offline flags block on purpose. A bare .safetensors therefore cannot be
+    # loaded under this project's no-Hugging-Face rule: the fix is a dataset in
+    # diffusers layout (a model_index.json beside unet/, vae/, text_encoder/),
+    # not turning the flags off.
+    raise SystemExit(
+        f"{single[0].name} is a single-file checkpoint, and loading one needs "
+        f"the pipeline config from huggingface.co, which is blocked here by "
+        f"policy.\n"
+        f"Use a dataset in DIFFUSERS layout instead -- it has model_index.json "
+        f"at its root and unet/ vae/ text_encoder/ subfolders.\n"
+        f"Candidates: kaggle datasets list -s 'stable diffusion xl'\n"
+        f"            kaggle models list -s sdxl   (models attach too now)")
 else:
     raise SystemExit(f"No SDXL weights found under {W}")
 
