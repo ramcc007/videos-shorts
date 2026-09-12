@@ -118,7 +118,8 @@ def push_dataset(a, user: str, slug: str, src: Path, staging: Path) -> str:
 
 
 def push_kernel(a, user: str, slug: str, notebook: Path, staging: Path,
-                gpu: bool, internet: bool, dataset_refs: list[str]) -> str:
+                gpu: bool, internet: bool, dataset_refs: list[str],
+                accelerator: str | None = None) -> str:
     ref = f"{user}/{slug}"
     staging.mkdir(parents=True, exist_ok=True)
     code_file = staging / notebook.name
@@ -141,6 +142,12 @@ def push_kernel(a, user: str, slug: str, notebook: Path, staging: Path,
         "kernel_sources": [],
         "model_sources": [r for r in dataset_refs if config.is_model_ref(r)],
     }
+    # Kaggle assigns a P100 or a T4 at random unless told otherwise, and its
+    # preinstalled torch has dropped Pascal (sm_60) -- so a P100 run cannot
+    # work at all. machine_shape pins the card; it is a free-form string the
+    # server validates, not an enum in the client.
+    if accelerator:
+        meta["machine_shape"] = accelerator
     (staging / "kernel-metadata.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
     size = code_file.stat().st_size
@@ -149,8 +156,15 @@ def push_kernel(a, user: str, slug: str, notebook: Path, staging: Path,
                          "Make the notebook download its inputs instead of embedding them.")
     print(f"[kaggle] pushing {ref}  (gpu={gpu} internet={internet} "
           f"datasets={meta['dataset_sources'] or 'none'} "
-          f"models={meta['model_sources'] or 'none'}, {size/1024:.0f} KB)")
-    a.kernels_push(str(staging))
+          f"models={meta['model_sources'] or 'none'}"
+          + (f" accelerator={accelerator}" if accelerator else "")
+          + f", {size/1024:.0f} KB)")
+    try:
+        a.kernels_push(str(staging), None, accelerator) if accelerator \
+            else a.kernels_push(str(staging))
+    except TypeError:
+        # older clients take only the folder; the metadata field still applies
+        a.kernels_push(str(staging))
     return ref
 
 
@@ -237,7 +251,8 @@ def download(a, ref: str, out_dir: Path) -> Path:
 
 def run(notebook: Path, slug: str, out_dir: Path, inputs: Path | None,
         gpu: bool, internet: bool, timeout_min: int,
-        extra_datasets: list[str] | None = None) -> Path:
+        extra_datasets: list[str] | None = None,
+        accelerator: str | None = None) -> Path:
     user = config.kaggle_username()
     a = api()
     staging = config.ROOT / "build" / "_staging" / slug
@@ -245,7 +260,8 @@ def run(notebook: Path, slug: str, out_dir: Path, inputs: Path | None,
     if inputs is not None:
         dataset_refs.append(
             push_dataset(a, user, f"{slug}-inputs", inputs, staging.parent / f"{slug}-inputs"))
-    ref = push_kernel(a, user, slug, notebook, staging, gpu, internet, dataset_refs)
+    ref = push_kernel(a, user, slug, notebook, staging, gpu, internet,
+                      dataset_refs, accelerator or config.accelerator())
     wait(a, ref, timeout_min, out_dir)
     return download(a, ref, out_dir)
 
@@ -257,7 +273,7 @@ def job_smoke(args) -> None:
     nb_path = config.ROOT / "build" / "smoke.ipynb"
     make_smoke_nb.build(nb_path)
     out = run(nb_path, "studio-smoke", config.ROOT / "build" / "smoke_out",
-              None, gpu=True, internet=True, timeout_min=args.timeout)
+              None, gpu=True, internet=True, timeout_min=args.timeout, accelerator=args.accelerator)
     smoke = out / "smoke.json"
     if smoke.exists():
         print("\nsmoke.json:", smoke.read_text().strip())
@@ -283,7 +299,7 @@ def job_voice(args) -> None:
     make_voice_nb.build(nb_path, lines, f"{config.kaggle_username()}/{slug}-inputs")
 
     out = run(nb_path, slug, vdir / "body" / "kaggle_out", ref.parent,
-              gpu=True, internet=True, timeout_min=args.timeout)
+              gpu=True, internet=True, timeout_min=args.timeout, accelerator=args.accelerator)
     print(f"\nVoice ready. Now run:\n"
           f"  python videos/{args.topic}/body/build_body.py --reuse-voice")
     print(f"(output in {out})")
@@ -305,7 +321,7 @@ def job_portrait(args) -> None:
 
     out = run(nb_path, "portrait", config.ROOT / "build" / "portrait_out",
               None, gpu=True, internet=True, timeout_min=args.timeout,
-              extra_datasets=[ref])
+              extra_datasets=[ref], accelerator=args.accelerator)
     print(f"""
 Portraits are in {out}. Open contact_sheet.png.
 
@@ -347,7 +363,7 @@ def job_footage_samples(args) -> None:
 
     out = run(nb_path, "footage-samples", config.ROOT / "build" / "footage_samples_out",
               inputs, gpu=True, internet=True, timeout_min=args.timeout,
-              extra_datasets=[ref])
+              extra_datasets=[ref], accelerator=args.accelerator)
     print(f"""
 Samples are in {out}.
 Unzip samples.zip and WATCH THEM before anything else is built.
@@ -384,7 +400,7 @@ def job_footage(args) -> None:
     vdir = config.video_dir(args.topic)
     out = run(nb_path, slug, vdir / "body" / "footage_zip", inputs,
               gpu=True, internet=True, timeout_min=args.timeout,
-              extra_datasets=[ref])
+              extra_datasets=[ref], accelerator=args.accelerator)
 
     # unpack next to the renderer, which pairs clips to shots by index
     import zipfile
@@ -409,6 +425,10 @@ def main() -> None:
     p.add_argument("--prompt", help="override the sample prompts")
     p.add_argument("--topic", help="video topic, for --job voice")
     p.add_argument("--seeds", help="comma-separated seeds for --job portrait")
+    p.add_argument("--accelerator", default=None,
+                   help="pin the GPU type, e.g. a T4 shape. Kaggle otherwise "
+                        "assigns a P100 or T4 at random, and its torch no "
+                        "longer supports the P100 (sm_60).")
     p.add_argument("--notebook", type=Path, help="run an arbitrary notebook")
     p.add_argument("--slug", help="kernel slug for --notebook")
     p.add_argument("--inputs", type=Path, help="folder to upload as a private dataset")

@@ -32,12 +32,22 @@ def main() -> int:
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--set-kaggle-user", metavar="NAME",
                    help="store your Kaggle username in config.json (git-ignored)")
+    p.add_argument("--set-accelerator", metavar="SHAPE",
+                   help="pin the Kaggle GPU shape for every job (P100s cannot "
+                        "run these jobs at all)")
     p.add_argument("--set-portrait-weights", metavar="OWNER/SLUG",
                    help="Kaggle dataset holding the SDXL portrait checkpoint")
     p.add_argument("--set-weights", metavar="OWNER/SLUG",
                    help="Kaggle dataset holding the video-model weights "
                         "(this project does not use Hugging Face)")
     args = p.parse_args()
+
+    if args.set_accelerator:
+        cfg = config.load()
+        cfg["kaggle_accelerator"] = args.set_accelerator.strip()
+        config.save(cfg)
+        print(f"Kaggle accelerator: {cfg['kaggle_accelerator']}")
+        return 0
 
     if args.set_portrait_weights:
         cfg = config.load()

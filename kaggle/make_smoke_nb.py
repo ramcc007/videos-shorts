@@ -22,6 +22,19 @@ print("python:", sys.version)
 print("platform:", platform.platform())
 print("utc:", datetime.datetime.utcnow().isoformat())
 
+# Report the card and what torch was built for: this is what decides whether
+# any GPU job here can run at all, and the smoke test is the cheapest place to
+# find out which shape a given accelerator setting actually yields.
+try:
+    import torch
+    cap = torch.cuda.get_device_capability()
+    print("device:", torch.cuda.get_device_name(0),
+          " capability: sm_" + str(cap[0]) + str(cap[1]))
+    print("torch:", torch.__version__, " built for:", torch.cuda.get_arch_list())
+    print("USABLE:", ("sm_" + str(cap[0]) + str(cap[1])) in torch.cuda.get_arch_list())
+except Exception as e:
+    print("torch check failed:", e)
+
 try:
     smi = subprocess.run(["nvidia-smi"], capture_output=True, text=True, timeout=60)
     print(smi.stdout or smi.stderr)

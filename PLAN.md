@@ -177,6 +177,29 @@ python tools/kaggle_run.py --job portrait --seeds 7,101,202,303   # if none fit
 A T4 and a P100 are both pre-Ampere and have no bfloat16, so the portrait
 notebook uses float16 throughout.
 
+## Kaggle GPUs: the P100 is not usable
+
+Kaggle allocates either a **T4 (sm_75)** or a **P100 (sm_60)** at random, and
+its preinstalled PyTorch is built for `sm_70` upward:
+
+```
+Tesla P100-PCIE-16GB with CUDA capability sm_60 is not compatible
+The current PyTorch install supports sm_70 sm_75 sm_80 sm_86 sm_90 sm_100 sm_120
+```
+
+So roughly half of unpinned GPU runs cannot work at all, and the failure lands
+inside a forward pass as `no kernel image is available for execution on the
+device` -- which reads like a model bug. Every GPU notebook now checks the
+device capability against `torch.cuda.get_arch_list()` before loading weights
+and stops in seconds with the real reason.
+
+Pin the card instead of re-rolling: `machine_shape` in the kernel metadata,
+exposed as `--accelerator` and stored once with
+`python tools/setup_check.py --set-accelerator <shape>`. Kaggle validates the
+string server-side; the client has no enum for it, so confirm a working value
+with the smoke test (it prints the card, the capability and `USABLE:`) before
+spending it on a real job.
+
 ## Open items
 
 - [x] ~~Run `python tools/kaggle_run.py --job smoke` against the real account.~~

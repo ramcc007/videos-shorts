@@ -81,6 +81,15 @@ def footage_weights() -> tuple[str, str]:
     return ref, cfg.get("footage_weights_dir") or mount_for(ref)
 
 
+def accelerator() -> str | None:
+    """Preferred Kaggle accelerator, if one has been pinned.
+
+    Kaggle's torch dropped Pascal, so a P100 cannot run any of these jobs. This
+    lets a working shape be recorded once instead of rediscovered per run.
+    """
+    return os.environ.get("STUDIO_KAGGLE_ACCELERATOR") or load().get("kaggle_accelerator")
+
+
 PLACEHOLDERS = {"owner/slug", "owner/name", "user/slug", "your/dataset"}
 
 
