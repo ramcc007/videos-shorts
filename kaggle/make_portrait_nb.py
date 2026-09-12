@@ -3,19 +3,22 @@
 Step 5 of the setup guide. The portrait it produces becomes the channel's
 presenter: you pick one, register it as a Flow character, and every clip from
 then on carries that face. So this generates several options in one run --
-re-running costs another GPU slot, and comparing four faces side by side beats
+re-running costs another GPU slot, and comparing faces side by side beats
 judging one in isolation.
 
 The prompt is built from presenter.json, so the face matches the presenter the
 rest of the pipeline already describes.
 
-No Hugging Face: weights come from a Kaggle dataset attached to the kernel, and
-HF_HUB_OFFLINE / DIFFUSERS_OFFLINE are set so an accidental reach for the Hub
-raises instead of silently downloading. If a load fails, attach the right
-dataset -- never unset the flags.
+No Hugging Face: weights come from a Kaggle dataset or model attached to the
+kernel, and HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE / DIFFUSERS_OFFLINE are set so
+an accidental reach for the Hub raises instead of silently downloading. If a
+load fails, attach the right dataset -- never unset the flags.
 
-Kaggle's free GPUs (T4, P100) are pre-Ampere and have no bfloat16, so this uses
-float16 throughout.
+Two rules about the cells below, both learned from failed GPU runs:
+  * no cell source may contain a triple quote (it closes the literal carrying
+    it) -- nb.code() enforces this;
+  * no cell is an f-string, so a brace in notebook code cannot be interpolated
+    at build time. CFG is injected by concatenation instead.
 """
 from __future__ import annotations
 
@@ -35,11 +38,10 @@ NEGATIVE = ("cartoon, anime, illustration, painting, 3d render, cgi, plastic ski
 def portrait_prompt(p: dict) -> str:
     """A head-and-shoulders portrait prompt from the presenter definition."""
     return (
-        f"photorealistic head and shoulders portrait photograph of {p['appearance']}, "
-        f"wearing {p.get('wardrobe', 'a plain jumper')}, "
-        f"in {p['room']}, "
-        f"{p.get('lighting', 'soft even lighting')}, "
-        "neutral friendly expression, looking directly into the camera, "
+        "photorealistic head and shoulders portrait photograph of "
+        + p["appearance"] + ", wearing " + p.get("wardrobe", "a plain jumper")
+        + ", in " + p["room"] + ", " + p.get("lighting", "soft even lighting")
+        + ", neutral friendly expression, looking directly into the camera, "
         "sharp focus on the eyes, 85mm portrait lens, shallow depth of field, "
         "natural skin texture with visible pores, documentary photography, "
         "colour photograph, centred composition"
@@ -48,33 +50,62 @@ def portrait_prompt(p: dict) -> str:
 
 def build(out_path: Path, presenter: dict, weights_dir: str,
           seeds: list[int], steps: int = 34, guidance: float = 5.5) -> Path:
-    prompt = portrait_prompt(presenter)
-    cfg = json.dumps({"prompt": prompt, "negative": NEGATIVE, "weights": weights_dir,
-                      "seeds": seeds, "steps": steps, "guidance": guidance,
+    cfg = json.dumps({"prompt": portrait_prompt(presenter), "negative": NEGATIVE,
+                      "weights": weights_dir, "seeds": seeds, "steps": steps,
+                      "guidance": guidance,
                       "name": presenter.get("name", "presenter")}, indent=2)
+    q = chr(39) * 3          # a triple quote for the CFG literal, built not typed
 
     cells = [
         nb.md("# Presenter portraits\n"
-              "Four options for the channel's presenter. Pick one; it becomes "
-              "permanent.\n\n"
-              "Weights come from an attached **Kaggle dataset**, not Hugging Face."),
+              "Options for the channel's presenter. Pick one; it becomes permanent.\n\n"
+              "Weights come from an attached **Kaggle source**, not Hugging Face."),
 
-        nb.code(f"""
-import json, os, sys, subprocess, time
+        nb.code("import json, os, sys, subprocess, time\n"
+                "CFG = json.loads(r" + q + cfg + q + ")\n"
+                "print('presenter:', CFG['name'])"),
 
-CFG = json.loads(r'''{cfg}''')
-
-# Offline by policy. A load failure here means the weights dataset is missing or
-# laid out differently -- attach the right dataset, do NOT unset these.
+        nb.code(r"""
+# Offline by policy. A load failure here means the weights source is missing or
+# laid out differently -- attach the right one, do NOT unset these.
 os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
 os.environ["DIFFUSERS_OFFLINE"] = "1"
 
+# Pin the preinstalled torch while installing. Left free, the resolver can pull
+# a newer build whose kernels no longer cover this machine's GPU, and that
+# failure then surfaces deep inside a forward pass rather than here.
+import torch
+with open("/tmp/constraints.txt", "w") as f:
+    f.write("torch==" + torch.__version__.split("+")[0] + "\n")
+print("torch preinstalled:", torch.__version__)
+
 subprocess.run([sys.executable, "-m", "pip", "install", "-q",
+                "-c", "/tmp/constraints.txt",
                 "diffusers", "transformers", "accelerate", "safetensors"], check=True)
-print(subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total",
-                      "--format=csv,noheader"], capture_output=True,
-                     text=True).stdout.strip())
+"""),
+
+        nb.code(r"""
+# Check the GPU against what this torch was built for, BEFORE loading 7 GB of
+# weights. A mismatch otherwise appears as "no kernel image is available for
+# execution on the device" inside the first forward pass, which reads like a
+# model bug rather than a build mismatch.
+import torch
+cap = torch.cuda.get_device_capability()
+sm = "sm_" + str(cap[0]) + str(cap[1])
+arches = torch.cuda.get_arch_list()
+name = torch.cuda.get_device_name(0)
+print("device:", name, " capability:", sm)
+print("torch:", torch.__version__, " built for:", arches)
+if sm not in arches:
+    raise SystemExit(
+        "This torch has no kernels for " + sm + " (" + name + ").\n"
+        "It was built for: " + str(arches) + "\n"
+        "Kaggle assigns either a P100 (sm_60) or a T4 (sm_75); this build does "
+        "not cover the card allocated to this run.\n"
+        "Fix: open the kernel on kaggle.com, set the accelerator to GPU T4 x2, "
+        "save, and re-run -- or re-run to be assigned a different card.")
+print("GPU and torch build are compatible.")
 """),
 
         nb.code(r"""
@@ -82,74 +113,56 @@ from pathlib import Path
 
 W = Path(CFG["weights"])
 if not W.exists():
-    raise SystemExit(
-        f"{W} does not exist.\\n"
-        "Attach the SDXL weights dataset to this kernel and re-run.\\n"
-        "Set it locally with: python tools/setup_check.py --set-portrait-weights owner/slug")
+    raise SystemExit(str(W) + " does not exist. Attach the SDXL weights source "
+                     "to this kernel and re-run.")
 
-# Accept either a diffusers directory or a single .safetensors checkpoint.
-# Kaggle models mount several levels deep (name/framework/variation/version),
-# so search at any depth rather than assuming a layout.
+# Kaggle models mount several levels deep (name/framework/variation/version), so
+# search at any depth rather than assuming a layout.
 single = sorted(W.rglob("*.safetensors"))
 is_diffusers = (W / "model_index.json").exists()
-# Prefer the base pipeline. A refiner is img2img-only and cannot start from
-# a prompt, but it ships beside the base model in several datasets and sorts
-# first alphabetically.
+
+# Prefer the base pipeline. A refiner is img2img-only and cannot start from a
+# prompt, but it ships beside the base model in several datasets and sorts first
+# alphabetically.
 def _rank(p):
     n = p.name.lower()
     return (0 if "base" in n else 2 if "refiner" in n else 1, len(str(p)))
 
-sub = sorted((p.parent for p in W.rglob("model_index.json")), key=_rank) if not is_diffusers else []
-print("layout:", "diffusers" if is_diffusers else (f"nested diffusers: {sub[:2]}" if sub
-      else f"{len(single)} safetensors file(s)"))
+sub = sorted((q.parent for q in W.rglob("model_index.json")), key=_rank) if not is_diffusers else []
+print("layout:", "diffusers" if is_diffusers else ("nested: " + str(sub[:2]) if sub
+      else str(len(single)) + " safetensors file(s)"))
 if not is_diffusers and not sub and not single:
-    print("TREE:", [str(p.relative_to(W)) for p in list(W.rglob("*"))[:40]])
-for f in single[:5]:
-    print("  ", f.relative_to(W), f"{f.stat().st_size/1e9:.2f} GB")
+    print("TREE:", [str(q.relative_to(W)) for q in list(W.rglob("*"))[:40]])
 """),
 
         nb.code(r"""
-import torch
 from diffusers import StableDiffusionXLPipeline
 
-# T4/P100 are pre-Ampere: no bfloat16. float16 throughout.
-DTYPE = torch.float16
-
+# T4 and P100 are both pre-Ampere: no bfloat16. float16 throughout.
 if is_diffusers:
-    src, loader = str(W), StableDiffusionXLPipeline.from_pretrained
+    src = str(W)
 elif sub:
-    src, loader = str(sub[0]), StableDiffusionXLPipeline.from_pretrained
     if "refiner" in sub[0].name.lower():
-        raise SystemExit(
-            f"Only a refiner pipeline was found ({sub[0].name}). The refiner "
-            f"cannot generate from a prompt on its own -- it refines an "
-            f"existing image. Attach a dataset containing the BASE model.")
-elif single:
-    # from_single_file reads the pipeline config from the Hub, which the
-    # offline flags block on purpose. A bare .safetensors therefore cannot be
-    # loaded under this project's no-Hugging-Face rule: the fix is a dataset in
-    # diffusers layout (a model_index.json beside unet/, vae/, text_encoder/),
-    # not turning the flags off.
-    raise SystemExit(
-        f"{single[0].name} is a single-file checkpoint, and loading one needs "
-        f"the pipeline config from huggingface.co, which is blocked here by "
-        f"policy.\n"
-        f"Use a dataset in DIFFUSERS layout instead -- it has model_index.json "
-        f"at its root and unet/ vae/ text_encoder/ subfolders.\n"
-        f"Candidates: kaggle datasets list -s 'stable diffusion xl'\n"
-        f"            kaggle models list -s sdxl   (models attach too now)")
+        raise SystemExit("Only a refiner pipeline was found (" + sub[0].name +
+                         "). A refiner cannot generate from a prompt on its own. "
+                         "Attach a source containing the BASE model.")
+    src = str(sub[0])
 else:
-    raise SystemExit(f"No SDXL weights found under {W}")
+    # from_single_file reads its pipeline config from the Hub, which the offline
+    # flags block on purpose. The fix is a diffusers-layout source, never
+    # unsetting the flags.
+    raise SystemExit("Only a single-file checkpoint was found, and loading one "
+                     "needs a config from huggingface.co, blocked here by policy. "
+                     "Use a source in diffusers layout (model_index.json beside "
+                     "unet/, vae/, text_encoder/).")
 
 t0 = time.time()
-kw = dict(torch_dtype=DTYPE, use_safetensors=True)
-if loader is StableDiffusionXLPipeline.from_pretrained:
-    kw["local_files_only"] = True          # from_single_file has no such kwarg
-pipe = loader(src, **kw)
+pipe = StableDiffusionXLPipeline.from_pretrained(
+    src, torch_dtype=torch.float16, use_safetensors=True, local_files_only=True)
 pipe = pipe.to("cuda")
-pipe.enable_attention_slicing()            # SDXL fp16 fits a 16GB T4 with this
+pipe.enable_attention_slicing()
 pipe.set_progress_bar_config(disable=True)
-print(f"loaded in {time.time()-t0:.0f}s from {src}")
+print("loaded in", round(time.time() - t0), "s from", src)
 """),
 
         nb.code(r"""
@@ -162,14 +175,14 @@ for seed in CFG["seeds"]:
                width=1024, height=1024,
                num_inference_steps=CFG["steps"],
                guidance_scale=CFG["guidance"], generator=g).images[0]
-    f = OUT / f"portrait_seed{seed}.png"
+    f = OUT / ("portrait_seed" + str(seed) + ".png")
     img.save(f)
     made.append((seed, f))
-    print(f"seed {seed}: {time.time()-t0:.0f}s -> {f.name}")
+    print("seed", seed, ":", round(time.time() - t0), "s ->", f.name)
 """),
 
         nb.code(r"""
-# One contact sheet so the four can be judged side by side, plus a thumbnail
+# One contact sheet so the options can be judged side by side, plus a thumbnail
 # strip: a face that works full-screen can still fail at thumbnail size.
 from PIL import Image
 
@@ -184,9 +197,8 @@ if ims:
     print("contact_sheet.png", sheet.size)
 
 with open(OUT / "portraits.json", "w") as fh:
-    json.dump({"prompt": CFG["prompt"], "negative": CFG["negative"],
+    json.dump({"prompt": CFG["prompt"], "seeds": [s for s, _ in made],
                "steps": CFG["steps"], "guidance": CFG["guidance"],
-               "seeds": [s for s, _ in made],
                "files": [f.name for _, f in made]}, fh, indent=2)
 print("done:", [f.name for _, f in made])
 """),
@@ -198,6 +210,5 @@ if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from studio import config, presenter as presmod
     ref, mount = config.portrait_weights()
-    out = build(Path("/tmp/portrait.ipynb"), presmod.load(), mount,
-                seeds=[11, 22, 33, 44])
-    print(f"wrote {out}  ({out.stat().st_size/1024:.1f} KB, limit ~1 MB)")
+    out = build(Path("/tmp/portrait.ipynb"), presmod.load(), mount, [11, 22, 33, 44])
+    print("wrote " + str(out))
