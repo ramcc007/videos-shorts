@@ -200,6 +200,14 @@ string server-side; the client has no enum for it, so confirm a working value
 with the smoke test (it prints the card, the capability and `USABLE:`) before
 spending it on a real job.
 
+**Found and pinned:** `NvidiaTeslaT4` (found in the installed `kaggle` package's
+`kagglesdk/kernels/types/kernels_api_service.py`, which documents
+`machine_shape` as one of `NvidiaTeslaT4` / `NvidiaTeslaP100` / `Tpu1VmV38` --
+the client has no public enum for it, but the SDK source does). Confirmed live
+with the smoke test: `device: Tesla T4  capability: sm_75`, `USABLE: True`.
+Stored via `python tools/setup_check.py --set-accelerator NvidiaTeslaT4`, so
+every job now gets a T4 without re-rolling.
+
 ## Open items
 
 - [x] ~~Run `python tools/kaggle_run.py --job smoke` against the real account.~~
@@ -207,6 +215,13 @@ spending it on a real job.
   `gpu_ok: true`. The Kaggle image runs Python 3.12.13, which is what the voice
   notebook's ensurepip note refers to. The headless path is proven; every other
   Kaggle job now fails for its own reasons, not the plumbing's.
+- [x] ~~Find a Kaggle accelerator string that yields a T4.~~ **Done** --
+  `NvidiaTeslaT4`, pinned in `config.json`. See "Kaggle GPUs" above.
+- [x] ~~Run `--job portrait` on a live T4.~~ **Done.** 6.6 min, 4 seed options
+  plus `contact_sheet.png` downloaded to `build/portrait_out/`. Next is the
+  human step: open the contact sheet, pick a face at both full-screen and
+  thumbnail size, back it up outside the project, then register it as a Flow
+  character.
 - [ ] **Quality gate:** `python tools/kaggle_run.py --job footage-samples --ref <still>`
       then watch the three clips before any further footage work. The notebooks
       in `kaggle/make_footage_nb.py` have never run on a live GPU -- the build
